@@ -115,11 +115,11 @@ const startBot = async () => {
         log(`💰 Balance: ${balance.toFixed(2)} | Buying with ${buyAmount.toFixed(2)}`);
         
         // Check minimum order value (usually $5-10)
-        if (buyAmount < 5) {
-          log(`⚠️ Buy amount too small: ${buyAmount.toFixed(2)} (minimum $5)`);
-          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-          continue;
-        }
+        // if (buyAmount < 5) {
+        //   log(`⚠️ Buy amount too small: ${buyAmount.toFixed(2)} (minimum $5)`);
+        //   await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+        //   continue;
+        // }
         
         const order = await placeOrder("BUY", quantity);
         if (order && order.status === "FILLED") {
