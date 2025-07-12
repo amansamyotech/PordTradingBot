@@ -1036,11 +1036,19 @@ const apiSecret =
   "vZkmBJu2Lx49HkEJEpCAQSYqn1wkRnYJ6VgGtNlUYRcYAppTDVN9I6ltmNEBUztm";
 
 const TRADING_PAIRS = [
-   { symbol: 'SOLUSDT', asset: 'SOL', quantity: 1, name: 'Solana' },
-   { symbol: 'SHIBUSDT', asset: 'SHIB', quantity: 100000, name: 'Shiba Inu' },
-   { symbol: 'DOGEUSDT', asset: 'DOGE', quantity: 100, name: 'Dogecoin' },
-   { symbol: 'ETHUSDT', asset: 'ETH', quantity: 0.01, name: 'Ethereum' },
-   { symbol: 'BTCUSDT', asset: 'BTC', quantity: 0.001, name: 'Bitcoin' }
+
+  { symbol: "SHIBUSDT", asset: "SHIB", quantity: 10000, name: "Shiba Inu" },
+  { symbol: "DOGEUSDT", asset: "DOGE", quantity: 10000,name: "Dogecoin" },
+  { symbol: "PEPEUSDT", asset: "PEPE", quantity: 10000,name: "Pepe Coin" },
+  { symbol: "BONKUSDT", asset: "BONK", quantity: 10000,name: "Bonk" },
+  { symbol: "FLOKIUSDT", asset: "FLOKI", quantity: 10000,name: "Floki Inu" },
+
+
+  //  { symbol: 'SOLUSDT', asset: 'SOL', quantity: 1, name: 'Solana' },
+  //  { symbol: 'SHIBUSDT', asset: 'SHIB', quantity: 100000, name: 'Shiba Inu' },
+  //  { symbol: 'DOGEUSDT', asset: 'DOGE', quantity: 100, name: 'Dogecoin' },
+  //  { symbol: 'ETHUSDT', asset: 'ETH', quantity: 0.01, name: 'Ethereum' },
+  //  { symbol: 'BTCUSDT', asset: 'BTC', quantity: 0.001, name: 'Bitcoin' }
 ];
 
 const PRICE_THRESHOLD = 0.1;
@@ -1117,7 +1125,7 @@ const logToFile = (message, type = "INFO") => {
 
   // Send Telegram notification for specific types
   if (['TRADE', 'PROFIT', 'ERROR', 'SYSTEM', 'UPDATE'].includes(type)) {
-    sendTelegram(`[${type}] ${message}`);
+    // sendTelegram(`[${type}] ${message}`);
   }
 };
 
@@ -1150,7 +1158,7 @@ const saveTradeToFile = (tradeData) => {
                   (tradeEntry.oldPrice ? `Old Ref Price: $${tradeEntry.oldPrice.toFixed(6)}\n` : '') +
                   (tradeEntry.newPrice ? `New Ref Price: $${tradeEntry.newPrice.toFixed(6)}\n` : '') +
                   `Time: ${tradeEntry.timestamp}`;
-  sendTelegram(message);
+  // sendTelegram(message);
 };
 
 // Save profit summary to file
@@ -1200,7 +1208,7 @@ const updateProfitStats = (symbol, profit, buyPrice, sellPrice) => {
                   `Total Loss: $${overallStats.totalLoss.toFixed(6)}\n` +
                   `Net Profit: $${netProfit.toFixed(6)}\n` +
                   `Win Rate: ${winRate}%`;
-  sendTelegram(message);
+  // sendTelegram(message);
 
   // Save updated stats
   saveProfitSummary();
@@ -1601,7 +1609,7 @@ const showDetailedSummary = async () => {
     console.log(`📁 All data saved to logs folder`);
 
     // Send Telegram notification for summary
-    sendTelegram(message);
+    // sendTelegram(message);
 
     // Save final summary
     saveProfitSummary();
