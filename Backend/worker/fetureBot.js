@@ -96,11 +96,15 @@ const placeOrder = async (side, qty) => {
       quantity: qty,
       timestamp: Date.now(),
     };
+    console.log(`params---->>>>>>>>>>>> place order   `,params);
+    
     const sig = sign(params);
     const res = await axios.post(`${FUTURES_API_BASE}/fapi/v1/order`, null, {
       params: { ...params, signature: sig },
       headers: { "X-MBX-APIKEY": apiKey },
     });
+console.log(`place order response  ----`,res.data);
+
     return res.data;
   } catch (e) {
     log(`❌ Order Error: ${e.response?.data?.msg || e.message}`);
@@ -159,8 +163,12 @@ const startBot = async () => {
 
       // SELL - if have position and target reached
       else if (position === "LONG" && currentPrice >= targetPrice) {
+        console.log('enter into sell');
+        
         // else if (position === "LONG") {
         const order = await placeOrder("SELL", quantity);
+        console.log('sell order placed', order);
+        
         if (order && order.status === "FILLED") {
           const profit = (currentPrice - buyPrice) * quantity;
 
