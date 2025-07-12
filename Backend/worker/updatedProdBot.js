@@ -333,7 +333,7 @@ const getSymbolFilters = async (symbol) => {
       stepSize: parseFloat(lotSizeFilter.stepSize),
       minQty: parseFloat(lotSizeFilter.minQty),
       minNotional: parseFloat(notionalFilter.minNotional),
-      quantityPrecision: symbolInfo.quantityPrecision,
+      quantityPrecision: symbolInfo.quantityPrecision || 6,
     };
   } catch (error) {
     logToFile(
@@ -348,7 +348,6 @@ const getSymbolFilters = async (symbol) => {
     };
   }
 };
-
 // Function to display current balances and allocate funds
 const initializeBalanceAllocation = async () => {
   logToFile("🔍 Getting current account balances...", "SYSTEM");
