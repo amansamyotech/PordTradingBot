@@ -77,7 +77,7 @@ const setMarginType = async () => {
 const placeOrder = async (side, qty) => {
   try {
     // await setMarginType();
-    await setLeverage();
+    // await setLeverage();
 
     const params = {
       symbol: SYMBOL,
