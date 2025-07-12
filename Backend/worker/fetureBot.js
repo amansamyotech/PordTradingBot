@@ -7,7 +7,7 @@ const apiKey =
 const apiSecret =
   "4zHQjwWb8AopnJx0yPjTKBNpW3ntoLaNK7PnbJjxwoB8ZSeaAaGTRLdIKLsixmPR";
 
-// const SYMBOL = "DOGEUSDT";
+const SYMBOL = "DOGEUSDT";
 // const SYMBOL = "1000PEPEUSDT";
 // const SYMBOL = "1000SHIBUSDT";
 // const SYMBOL = "1000BONKUSDT";
