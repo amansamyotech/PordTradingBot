@@ -5,7 +5,7 @@ const FUTURES_API_BASE = "https://fapi.binance.com";
 const apiKey = "YOUR_API_KEY_HERE";
 const apiSecret = "YOUR_API_SECRET_HERE";
 
-const SYMBOLS = ["DOGEUSDT", "1000PEPEUSDT"];
+const SYMBOLS = ["DOGEUSDT", "1000SHIBUSDT"];
 
 const MIN_BALANCE = 5; // Step 1: Balance should be > $5
 const TRADE_AMOUNT = 6; // Step 2: $6 per trade
