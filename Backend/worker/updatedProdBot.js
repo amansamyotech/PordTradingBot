@@ -11,16 +11,15 @@ const apiSecret =
 
 // Trading pairs configuration
 const TRADING_PAIRS = [
-  { symbol: "SOLUSDT", asset: "SOL", name: "Solana" },
   { symbol: "SHIBUSDT", asset: "SHIB", name: "Shiba Inu" },
   { symbol: "DOGEUSDT", asset: "DOGE", name: "Dogecoin" },
-  { symbol: "ETHUSDT", asset: "ETH", name: "Ethereum" },
-  { symbol: "BTCUSDT", asset: "BTC", name: "Bitcoin" },
+  { symbol: "PEPEUSDT", asset: "PEPE", name: "Pepe Coin" },
+  { symbol: "BONKUSDT", asset: "BONK", name: "Bonk" },
+  { symbol: "FLOKIUSDT", asset: "FLOKI", name: "Floki Inu" },
 ];
 
-const ROI_PERCENTAGE = 2; // 2% ROI target
+const ROI_PERCENTAGE = 0.2; // 0.2% ROI target
 const CHECK_INTERVAL = 5000; // Check every 5 seconds
-const MIN_USDT_PER_TRADE = 1; // Minimum USDT per trade (above Binance minimum)
 
 // Create logs directory
 const logsDir = path.join(__dirname, "logs");
@@ -47,6 +46,7 @@ let overallStats = {
   coinStats: {},
   initialBalance: 0,
   currentBalance: 0,
+  allocatedPerCoin: 0, // Track how much each coin should get
 };
 
 // Initialize trading state and coin stats
@@ -62,6 +62,7 @@ TRADING_PAIRS.forEach((pair) => {
     quantity: 0,
     targetSellPrice: null,
     lastTradeTime: 0,
+    availableForTrading: 0, // Track available USDT for this coin
   };
 
   overallStats.coinStats[pair.symbol] = {
@@ -140,6 +141,10 @@ const updateProfitStats = (symbol, profit, buyPrice, sellPrice, quantity) => {
     coinStats.losingTrades++;
   }
 
+  // Update available funds for this coin (reinvest the proceeds)
+  const proceeds = sellPrice * quantity;
+  state.availableForTrading = proceeds;
+
   saveTradeToFile({
     symbol: symbol,
     coin: coinStats.name,
@@ -148,7 +153,8 @@ const updateProfitStats = (symbol, profit, buyPrice, sellPrice, quantity) => {
     sellPrice: sellPrice,
     profit: profit,
     quantity: quantity,
-    roiPercentage: (((sellPrice - buyPrice) / buyPrice) * 100).toFixed(2),
+    roiPercentage: (((sellPrice - buyPrice) / buyPrice) * 100).toFixed(4),
+    proceeds: proceeds,
   });
 
   const netProfit = overallStats.totalProfit - overallStats.totalLoss;
@@ -163,8 +169,9 @@ const updateProfitStats = (symbol, profit, buyPrice, sellPrice, quantity) => {
   const message =
     `💰 TRADE COMPLETED: ${coinStats.name}\n` +
     `Buy: $${buyPrice.toFixed(6)} | Sell: $${sellPrice.toFixed(6)}\n` +
-    `ROI: ${(((sellPrice - buyPrice) / buyPrice) * 100).toFixed(2)}%\n` +
+    `ROI: ${(((sellPrice - buyPrice) / buyPrice) * 100).toFixed(4)}%\n` +
     `Profit: $${profit.toFixed(6)}\n` +
+    `Reinvesting: $${proceeds.toFixed(6)}\n` +
     `Total Net: $${netProfit.toFixed(6)} | Win Rate: ${winRate}%`;
 
   sendTelegram(message);
@@ -329,7 +336,7 @@ const getSymbolFilters = async (symbol) => {
       return {
         stepSize: 0.000001,
         minQty: 0,
-        minNotional: 10,
+        minNotional: 5,
         quantityPrecision: 6,
       };
     }
@@ -344,7 +351,7 @@ const getSymbolFilters = async (symbol) => {
     return {
       stepSize: parseFloat(lotSizeFilter?.stepSize || 0.000001),
       minQty: parseFloat(lotSizeFilter?.minQty || 0),
-      minNotional: parseFloat(notionalFilter?.minNotional || 10),
+      minNotional: parseFloat(notionalFilter?.minNotional || 5),
       quantityPrecision: symbolInfo.quantityPrecision || 6,
     };
   } catch (error) {
@@ -355,7 +362,7 @@ const getSymbolFilters = async (symbol) => {
     return {
       stepSize: 0.000001,
       minQty: 0,
-      minNotional: 10,
+      minNotional: 5,
       quantityPrecision: 6,
     };
   }
@@ -368,146 +375,125 @@ const formatQuantity = (quantity, stepSize, precision) => {
   return parseFloat(rounded.toFixed(precision));
 };
 
-// Function to display current balances and allocate funds
-const initializeBalanceAllocation = async () => {
-  logToFile("🔍 Getting current account balances...", "SYSTEM");
-
-  const balances = await getAllBalances();
+// Function to distribute balance equally among coins
+const distributeBalanceEqually = async () => {
+  logToFile("🔍 Fetching account balance for equal distribution...", "SYSTEM");
+  
   const usdtBalance = await getBalance("USDT");
+  const allocatedPerCoin = usdtBalance / TRADING_PAIRS.length;
+  
+  overallStats.allocatedPerCoin = allocatedPerCoin;
+  
+  // Set initial allocation for each coin
+  TRADING_PAIRS.forEach((pair) => {
+    const state = tradingState[pair.symbol];
+    state.availableForTrading = allocatedPerCoin;
+    state.allocatedAmount = allocatedPerCoin;
+    overallStats.coinStats[pair.symbol].allocatedUSDT = allocatedPerCoin;
+  });
 
-  // Calculate current portfolio value
-  let totalPortfolioValue = usdtBalance;
-  const prices = await getMultiplePrices(TRADING_PAIRS.map((p) => p.symbol));
+  let balanceMessage = `💰 BALANCE DISTRIBUTION:\n`;
+  balanceMessage += `Total USDT: $${usdtBalance.toFixed(6)}\n`;
+  balanceMessage += `Coins: ${TRADING_PAIRS.length}\n`;
+  balanceMessage += `Per Coin: $${allocatedPerCoin.toFixed(6)}\n`;
+  balanceMessage += `${"=".repeat(50)}\n`;
 
-  let balanceMessage = `💰 CURRENT ACCOUNT BALANCES:\n`;
-  balanceMessage += `USDT: ${usdtBalance.toFixed(6)}\n`;
-
-  for (const pair of TRADING_PAIRS) {
-    const balance = await getBalance(pair.asset);
-    const currentPrice = prices[pair.symbol];
-    const usdtValue = balance * currentPrice;
-    totalPortfolioValue += usdtValue;
-
-    overallStats.coinStats[pair.symbol].currentHolding = balance;
-
-    balanceMessage += `${pair.asset}: ${balance.toFixed(
-      6
-    )} (~$${usdtValue.toFixed(6)})\n`;
-  }
-
-  balanceMessage += `\nTotal Portfolio Value: $${totalPortfolioValue.toFixed(
-    6
-  )}\n`;
-  balanceMessage += `Available for trading: $${usdtBalance.toFixed(6)}`;
+  TRADING_PAIRS.forEach((pair) => {
+    balanceMessage += `${pair.name}: $${allocatedPerCoin.toFixed(6)}\n`;
+  });
 
   logToFile(balanceMessage, "BALANCE");
 
-  overallStats.initialBalance = totalPortfolioValue;
-  overallStats.currentBalance = totalPortfolioValue;
+  overallStats.initialBalance = usdtBalance;
+  overallStats.currentBalance = usdtBalance;
 
   return usdtBalance;
 };
 
-// Main trading logic - simplified and more robust
+// Main trading logic - buy with allocated amount, sell at 0.2% profit
 const executeTradingLogic = async (symbol, currentPrice, state) => {
   if (state.isTrading) return;
 
   const now = Date.now();
-  // Prevent rapid trading - wait at least 30 seconds between trades
-  if (now - state.lastTradeTime < 30000) return;
+  // Prevent rapid trading - wait at least 10 seconds between trades
+  if (now - state.lastTradeTime < 10000) return;
 
   const coinStats = overallStats.coinStats[symbol];
 
   try {
-    // If no position, try to buy
-    if (state.position === null) {
-      const usdtBalance = await getBalance("USDT");
+    // If no position and have funds allocated, try to buy
+    if (state.position === null && state.availableForTrading > 0) {
+      const investmentAmount = state.availableForTrading;
 
-      // Calculate how much to invest per coin (split available balance)
-      const investmentAmount = Math.max(
-        MIN_USDT_PER_TRADE,
-        usdtBalance / TRADING_PAIRS.length
+      state.isTrading = true;
+      state.lastTradeTime = now;
+
+      // Get symbol filters for proper quantity calculation
+      const { stepSize, minQty, minNotional, quantityPrecision } =
+        await getSymbolFilters(symbol);
+
+      // Calculate quantity
+      let quantity = investmentAmount / currentPrice;
+      quantity = formatQuantity(quantity, stepSize, quantityPrecision);
+
+      const notionalValue = quantity * currentPrice;
+
+      // Check if trade meets minimum requirements
+      if (quantity < minQty || notionalValue < minNotional) {
+        logToFile(
+          `❌ ${symbol} - Trade too small: ${quantity} ${state.asset} ($${notionalValue.toFixed(
+            2
+          )}) - Min: ${minQty} or $${minNotional}`,
+          "SYSTEM"
+        );
+        state.isTrading = false;
+        return;
+      }
+
+      logToFile(
+        `🔄 Buying ${quantity} ${symbol} with $${investmentAmount.toFixed(6)} at $${currentPrice.toFixed(6)}`,
+        "TRADE"
       );
 
-      // Only trade if we have enough balance
-      if (
-        usdtBalance >= investmentAmount &&
-        investmentAmount >= MIN_USDT_PER_TRADE
-      ) {
-        state.isTrading = true;
-        state.lastTradeTime = now;
+      // Place buy order
+      const buyOrder = await placeOrder(symbol, "BUY", quantity);
 
-        // Get symbol filters for proper quantity calculation
-        const { stepSize, minQty, minNotional, quantityPrecision } =
-          await getSymbolFilters(symbol);
+      if (buyOrder && buyOrder.status === "FILLED") {
+        // Calculate actual executed price from order
+        const executedPrice =
+          parseFloat(buyOrder.cummulativeQuoteQty) /
+          parseFloat(buyOrder.executedQty);
 
-        // Calculate quantity
-        let quantity = investmentAmount / currentPrice;
-        quantity = formatQuantity(quantity, stepSize, quantityPrecision);
-
-        const notionalValue = quantity * currentPrice;
-
-        // Check if trade meets minimum requirements
-        if (quantity < minQty || notionalValue < minNotional) {
-          logToFile(
-            `❌ ${symbol} - Insufficient quantity: ${quantity} (min: ${minQty}) or notional: $${notionalValue.toFixed(
-              2
-            )} (min: $${minNotional})`,
-            "SYSTEM"
-          );
-          state.isTrading = false;
-          return;
-        }
+        state.position = "long";
+        state.buyPrice = executedPrice;
+        state.quantity = parseFloat(buyOrder.executedQty);
+        state.targetSellPrice = executedPrice * (1 + ROI_PERCENTAGE / 100);
+        state.availableForTrading = 0; // Funds are now invested
 
         logToFile(
-          `🔄 Attempting to buy ${quantity} ${symbol} at $${currentPrice.toFixed(
-            6
-          )} (Total: $${notionalValue.toFixed(2)})`,
+          `✅ BOUGHT ${state.quantity} ${state.name} at $${executedPrice.toFixed(6)}`,
+          "TRADE"
+        );
+        logToFile(
+          `🎯 Target sell price: $${state.targetSellPrice.toFixed(6)} (${ROI_PERCENTAGE}% ROI)`,
           "TRADE"
         );
 
-        // Place buy order
-        const buyOrder = await placeOrder(symbol, "BUY", quantity);
-
-        if (buyOrder && buyOrder.status === "FILLED") {
-          // Calculate actual executed price from order
-          const executedPrice =
-            parseFloat(buyOrder.cummulativeQuoteQty) /
-            parseFloat(buyOrder.executedQty);
-
-          state.position = "long";
-          state.buyPrice = executedPrice;
-          state.quantity = parseFloat(buyOrder.executedQty);
-          state.targetSellPrice = executedPrice * (1 + ROI_PERCENTAGE / 100);
-
-          logToFile(
-            `✅ BOUGHT ${state.quantity} ${
-              state.name
-            } at $${executedPrice.toFixed(6)}`,
-            "TRADE"
-          );
-          logToFile(
-            `🎯 Target sell price: $${state.targetSellPrice.toFixed(
-              6
-            )} (${ROI_PERCENTAGE}% ROI)`,
-            "TRADE"
-          );
-
-          saveTradeToFile({
-            symbol: symbol,
-            coin: state.name,
-            action: "BUY",
-            price: executedPrice,
-            quantity: state.quantity,
-            targetSellPrice: state.targetSellPrice,
-            orderId: buyOrder.orderId,
-          });
-        } else {
-          logToFile(`❌ Failed to buy ${symbol}`, "ERROR");
-        }
-
-        state.isTrading = false;
+        saveTradeToFile({
+          symbol: symbol,
+          coin: state.name,
+          action: "BUY",
+          price: executedPrice,
+          quantity: state.quantity,
+          targetSellPrice: state.targetSellPrice,
+          orderId: buyOrder.orderId,
+          investedAmount: parseFloat(buyOrder.cummulativeQuoteQty),
+        });
+      } else {
+        logToFile(`❌ Failed to buy ${symbol}`, "ERROR");
       }
+
+      state.isTrading = false;
     }
     // If holding position, check if we should sell
     else if (state.position === "long" && state.targetSellPrice) {
@@ -522,9 +508,7 @@ const executeTradingLogic = async (symbol, currentPrice, state) => {
 
         if (sellQuantity > 0) {
           logToFile(
-            `🔄 Attempting to sell ${sellQuantity} ${symbol} at $${currentPrice.toFixed(
-              6
-            )}`,
+            `🔄 Selling ${sellQuantity} ${symbol} at $${currentPrice.toFixed(6)} (Target: $${state.targetSellPrice.toFixed(6)})`,
             "TRADE"
           );
 
@@ -543,15 +527,11 @@ const executeTradingLogic = async (symbol, currentPrice, state) => {
               ((executedPrice - state.buyPrice) / state.buyPrice) * 100;
 
             logToFile(
-              `✅ SOLD ${sellOrder.executedQty} ${
-                state.name
-              } at $${executedPrice.toFixed(6)}`,
+              `✅ SOLD ${sellOrder.executedQty} ${state.name} at $${executedPrice.toFixed(6)}`,
               "TRADE"
             );
             logToFile(
-              `💰 ROI Achieved: ${roiAchieved.toFixed(
-                2
-              )}% | Profit: $${profit.toFixed(6)}`,
+              `💰 ROI: ${roiAchieved.toFixed(4)}% | Profit: $${profit.toFixed(6)}`,
               "PROFIT"
             );
 
@@ -563,11 +543,12 @@ const executeTradingLogic = async (symbol, currentPrice, state) => {
               parseFloat(sellOrder.executedQty)
             );
 
-            // Reset for next trade
+            // Reset for next trade - funds are now available for trading again
             state.position = null;
             state.buyPrice = null;
             state.quantity = 0;
             state.targetSellPrice = null;
+            // availableForTrading is set in updateProfitStats
           } else {
             logToFile(`❌ Failed to sell ${symbol}`, "ERROR");
           }
@@ -599,18 +580,15 @@ const displayStatus = (prices) => {
 
   console.log(`🤖 Crypto Trading Bot - ${ROI_PERCENTAGE}% ROI Strategy`);
   console.log(`⏰ ${new Date().toLocaleTimeString()}`);
-  console.log(
-    `🎯 Target ROI: ${ROI_PERCENTAGE}% | 🔄 Check: ${CHECK_INTERVAL}ms`
-  );
-  console.log(`${"=".repeat(90)}`);
+  console.log(`🎯 Target ROI: ${ROI_PERCENTAGE}% | 🔄 Check: ${CHECK_INTERVAL}ms`);
+  console.log(`💰 Allocation per coin: $${overallStats.allocatedPerCoin.toFixed(6)}`);
+  console.log(`${"=".repeat(100)}`);
   console.log(`📊 OVERALL PERFORMANCE:`);
   console.log(`💚 Total Profit: $${overallStats.totalProfit.toFixed(6)}`);
   console.log(`💔 Total Loss: $${overallStats.totalLoss.toFixed(6)}`);
   console.log(`🎯 Net Profit: $${netProfit.toFixed(6)}`);
-  console.log(
-    `📈 Win Rate: ${winRate}% (${overallStats.profitableTrades}/${overallStats.totalTrades})`
-  );
-  console.log(`${"=".repeat(90)}`);
+  console.log(`📈 Win Rate: ${winRate}% (${overallStats.profitableTrades}/${overallStats.totalTrades})`);
+  console.log(`${"=".repeat(100)}`);
 
   TRADING_PAIRS.forEach((pair) => {
     const state = tradingState[pair.symbol];
@@ -619,73 +597,56 @@ const displayStatus = (prices) => {
 
     if (currentPrice) {
       const statusEmoji = state.position === "long" ? "🟢" : "🔴";
-      const positionText = state.position === "long" ? "HOLDING" : "WAITING";
+      const positionText = state.position === "long" ? "HOLDING" : "READY";
       const buyPrice = state.buyPrice ? `$${state.buyPrice.toFixed(6)}` : "N/A";
-      const targetPrice = state.targetSellPrice
-        ? `$${state.targetSellPrice.toFixed(6)}`
-        : "N/A";
+      const targetPrice = state.targetSellPrice ? `$${state.targetSellPrice.toFixed(6)}` : "N/A";
       const coinNetProfit = coinStats.profit - coinStats.loss;
+      const availableFunds = state.availableForTrading;
 
       let progressBar = "";
-      if (
-        state.position === "long" &&
-        state.buyPrice &&
-        state.targetSellPrice
-      ) {
+      if (state.position === "long" && state.buyPrice && state.targetSellPrice) {
         const progress = Math.min(
           100,
           Math.max(
             0,
-            ((currentPrice - state.buyPrice) /
-              (state.targetSellPrice - state.buyPrice)) *
-              100
+            ((currentPrice - state.buyPrice) / (state.targetSellPrice - state.buyPrice)) * 100
           )
         );
         const filled = Math.floor(progress / 10);
-        progressBar = `[${"█".repeat(filled)}${"░".repeat(
-          10 - filled
-        )}] ${progress.toFixed(1)}%`;
+        progressBar = `[${"█".repeat(filled)}${"░".repeat(10 - filled)}] ${progress.toFixed(1)}%`;
       }
 
       console.log(
-        `${statusEmoji} ${state.name.padEnd(12)} | ${positionText.padEnd(
-          7
-        )} | ` +
-          `Price: $${currentPrice.toFixed(6).padEnd(10)} | ` +
+        `${statusEmoji} ${state.name.padEnd(12)} | ${positionText.padEnd(7)} | ` +
+          `Price: $${currentPrice.toFixed(6).padEnd(12)} | ` +
           `Buy: ${buyPrice.padEnd(12)} | Target: ${targetPrice.padEnd(12)} | ` +
+          `Available: $${availableFunds.toFixed(2).padEnd(8)} | ` +
           `P/L: $${coinNetProfit.toFixed(6).padEnd(10)} | ${progressBar}`
       );
     }
   });
 
-  console.log(`${"=".repeat(90)}`);
+  console.log(`${"=".repeat(100)}`);
   console.log(`📁 Logs: ${logFile}`);
   console.log(`📊 Trades: ${tradesFile}`);
 };
 
 // Main trading loop
 const startTrading = async () => {
-  logToFile("🚀 Starting 2% ROI Trading Bot...", "SYSTEM");
+  logToFile("🚀 Starting 0.2% ROI Equal Distribution Trading Bot...", "SYSTEM");
 
-  // Initialize balance allocation
-  const usdtBalance = await initializeBalanceAllocation();
-  if (usdtBalance < MIN_USDT_PER_TRADE) {
-    logToFile(
-      `❌ Insufficient USDT balance: $${usdtBalance.toFixed(
-        6
-      )}. Minimum required: $${MIN_USDT_PER_TRADE}`,
-      "ERROR"
-    );
+  // Distribute balance equally among coins
+  const totalBalance = await distributeBalanceEqually();
+  if (totalBalance <= 0) {
+    logToFile(`❌ No USDT balance available for trading`, "ERROR");
     return;
   }
 
-  logToFile(
-    `📊 Trading pairs: ${TRADING_PAIRS.map((p) => p.name).join(", ")}`,
-    "SYSTEM"
-  );
+  logToFile(`📊 Trading pairs: ${TRADING_PAIRS.map((p) => p.name).join(", ")}`, "SYSTEM");
   logToFile(`🎯 ROI target: ${ROI_PERCENTAGE}%`, "SYSTEM");
   logToFile(`⏰ Check interval: ${CHECK_INTERVAL}ms`, "SYSTEM");
-  logToFile(`💰 Available USDT: $${usdtBalance.toFixed(6)}`, "SYSTEM");
+  logToFile(`💰 Total USDT: $${totalBalance.toFixed(6)}`, "SYSTEM");
+  logToFile(`💸 Per coin: $${overallStats.allocatedPerCoin.toFixed(6)}`, "SYSTEM");
 
   const symbols = TRADING_PAIRS.map((pair) => pair.symbol);
 
@@ -699,11 +660,7 @@ const startTrading = async () => {
         for (const pair of TRADING_PAIRS) {
           const currentPrice = prices[pair.symbol];
           if (currentPrice) {
-            await executeTradingLogic(
-              pair.symbol,
-              currentPrice,
-              tradingState[pair.symbol]
-            );
+            await executeTradingLogic(pair.symbol, currentPrice, tradingState[pair.symbol]);
           }
         }
       }
@@ -719,15 +676,12 @@ const startTrading = async () => {
 // Display detailed summary
 const showDetailedSummary = async () => {
   console.log(`\n📊 DETAILED TRADING SUMMARY:`);
-  console.log(`${"=".repeat(90)}`);
+  console.log(`${"=".repeat(100)}`);
 
   const netProfit = overallStats.totalProfit - overallStats.totalLoss;
   const winRate =
     overallStats.totalTrades > 0
-      ? (
-          (overallStats.profitableTrades / overallStats.totalTrades) *
-          100
-        ).toFixed(1)
+      ? ((overallStats.profitableTrades / overallStats.totalTrades) * 100).toFixed(1)
       : 0;
 
   let message =
@@ -744,15 +698,12 @@ const showDetailedSummary = async () => {
     const coinStats = overallStats.coinStats[pair.symbol];
     const coinNetProfit = coinStats.profit - coinStats.loss;
     const coinWinRate =
-      coinStats.trades > 0
-        ? ((coinStats.profitableTrades / coinStats.trades) * 100).toFixed(1)
-        : 0;
+      coinStats.trades > 0 ? ((coinStats.profitableTrades / coinStats.trades) * 100).toFixed(1) : 0;
 
     console.log(
-      `${pair.name.padEnd(12)}: ${balance.toFixed(6)} ${pair.asset.padEnd(
-        4
-      )} | ` +
+      `${pair.name.padEnd(12)}: ${balance.toFixed(6)} ${pair.asset.padEnd(4)} | ` +
         `Status: ${(state.position || "None").padEnd(7)} | ` +
+        `Available: $${state.availableForTrading.toFixed(2)} | ` +
         `P/L: $${coinNetProfit.toFixed(6).padEnd(10)} | ` +
         `Win: ${coinWinRate}% (${coinStats.profitableTrades}/${coinStats.trades})`
     );
