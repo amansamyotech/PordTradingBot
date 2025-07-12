@@ -147,6 +147,9 @@ const placeOrder = async (symbol, side, quantity) => {
       quantity,
       timestamp: Date.now(),
     };
+    await setLeverage(symbol, 1);
+    await setMarginType(symbol, 'ISOLATED')
+
     params.signature = generateSignature(params, apiSecret);
 
     const res = await axios.post(`${FUTURES_API_BASE}/fapi/v1/order`, null, {
