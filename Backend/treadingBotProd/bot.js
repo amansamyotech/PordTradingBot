@@ -2,8 +2,10 @@ const axios = require("axios");
 const crypto = require("crypto");
 
 const FUTURES_API_BASE = "https://fapi.binance.com";
-const apiKey = "YOUR_API_KEY_HERE";
-const apiSecret = "YOUR_API_SECRET_HERE";
+const apiKey =
+  "6bd1UA2kXR2lgLPv1pt9bNEOJE70h1MbXMvmoH1SceWUNw0kvXAQEdigQUgfNprI";
+const apiSecret =
+  "4zHQjwWb8AopnJx0yPjTKBNpW3ntoLaNK7PnbJjxwoB8ZSeaAaGTRLdIKLsixmPR";
 
 const SYMBOLS = ["DOGEUSDT", "1000SHIBUSDT"];
 
