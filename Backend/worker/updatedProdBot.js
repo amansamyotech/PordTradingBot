@@ -17,7 +17,6 @@ const apiSecret =
 //   { symbol: "FLOKIUSDT", asset: "FLOKI", name: "Floki Inu" },
 // ];
 
-
 const TRADING_PAIRS = ["SOLUSDT", "SHIBUSDT", "DOGEUSDT", "ETHUSDT", "BTCUSDT"];
 
 const ROI_PERCENTAGE = 2; // 2% ROI target
@@ -192,17 +191,35 @@ const getCurrentPrice = async (symbol) => {
 };
 
 // Function to get prices for multiple symbols
+// const getMultiplePrices = async (symbols) => {
+//   try {
+//     const symbolsParam = symbols.map((s) => `"${s}"`).join(",");
+//     const params = { symbols: `[${symbolsParam}]` };
+//     const response = await axios.get(
+//       "https://api.binance.com/api/v3/ticker/price",
+//       { params: params }
+//     );
+//     const prices = {};
+//     response.data.forEach((item) => {
+//       prices[item.symbol] = parseFloat(item.price);
+//     });
+//     return prices;
+//   } catch (error) {
+//     logToFile(`Error getting prices: ${error.message}`, "ERROR");
+//     return null;
+//   }
+// };
+
 const getMultiplePrices = async (symbols) => {
   try {
-    const symbolsParam = symbols.map((s) => `"${s}"`).join(",");
-    const params = { symbols: `[${symbolsParam}]` };
     const response = await axios.get(
-      "https://api.binance.com/api/v3/ticker/price",
-      { params: params }
+      "https://api.binance.com/api/v3/ticker/price"
     );
     const prices = {};
     response.data.forEach((item) => {
-      prices[item.symbol] = parseFloat(item.price);
+      if (symbols.includes(item.symbol)) {
+        prices[item.symbol] = parseFloat(item.price);
+      }
     });
     return prices;
   } catch (error) {
@@ -210,7 +227,6 @@ const getMultiplePrices = async (symbols) => {
     return null;
   }
 };
-
 // Function to place a market order
 const placeOrder = async (symbol, side, quantity) => {
   try {
@@ -317,26 +333,47 @@ const getAllBalances = async () => {
 // };
 const getSymbolFilters = async (symbol) => {
   try {
-    const response = await axios.get("https://api.binance.com/api/v3/exchangeInfo");
-    const symbolInfo = response.data.symbols.find((s) => s.symbol === symbol.toUpperCase());
+    const response = await axios.get(
+      "https://api.binance.com/api/v3/exchangeInfo"
+    );
+    const symbolInfo = response.data.symbols.find(
+      (s) => s.symbol === symbol.toUpperCase()
+    );
 
     if (!symbolInfo) {
       logToFile(`Symbol info not found for ${symbol}`, "ERROR");
-      return { stepSize: 0.000001, minQty: 0, minNotional: 0, quantityPrecision: 6 };
+      return {
+        stepSize: 0.000001,
+        minQty: 0,
+        minNotional: 0,
+        quantityPrecision: 6,
+      };
     }
 
-    const lotSizeFilter = symbolInfo.filters.find(f => f.filterType === "LOT_SIZE");
-    const notionalFilter = symbolInfo.filters.find(f => f.filterType === "MIN_NOTIONAL");
+    const lotSizeFilter = symbolInfo.filters.find(
+      (f) => f.filterType === "LOT_SIZE"
+    );
+    const notionalFilter = symbolInfo.filters.find(
+      (f) => f.filterType === "MIN_NOTIONAL"
+    );
 
     return {
       stepSize: parseFloat(lotSizeFilter.stepSize),
       minQty: parseFloat(lotSizeFilter.minQty),
       minNotional: parseFloat(notionalFilter.minNotional),
-      quantityPrecision: symbolInfo.quantityPrecision || 6
+      quantityPrecision: symbolInfo.quantityPrecision || 6,
     };
   } catch (error) {
-    logToFile(`Error fetching filters for ${symbol}: ${error.message}`, "ERROR");
-    return { stepSize: 0.000001, minQty: 0, minNotional: 0, quantityPrecision: 6 };
+    logToFile(
+      `Error fetching filters for ${symbol}: ${error.message}`,
+      "ERROR"
+    );
+    return {
+      stepSize: 0.000001,
+      minQty: 0,
+      minNotional: 0,
+      quantityPrecision: 6,
+    };
   }
 };
 // Function to display current balances and allocate funds
@@ -483,7 +520,7 @@ const executeTradingLogic = async (symbol, currentPrice, state) => {
 
   if (state.position === null) {
     const usdtBalance = await getBalance("USDT");
-    const requiredAmount = usdtBalance * 0.9 / TRADING_PAIRS.length; // Use 90% of balance evenly split
+    const requiredAmount = (usdtBalance * 0.9) / TRADING_PAIRS.length; // Use 90% of balance evenly split
 
     if (usdtBalance >= requiredAmount) {
       state.isTrading = true;
@@ -495,7 +532,12 @@ const executeTradingLogic = async (symbol, currentPrice, state) => {
       const notional = quantity * currentPrice;
 
       if (quantity < minQty || notional < minNotional) {
-        logToFile(`Skipping ${symbol} - Quantity ${quantity} or Notional $${notional.toFixed(6)} below minimum`, "SYSTEM");
+        logToFile(
+          `Skipping ${symbol} - Quantity ${quantity} or Notional $${notional.toFixed(
+            6
+          )} below minimum`,
+          "SYSTEM"
+        );
         state.isTrading = false;
         return;
       }
@@ -507,8 +549,16 @@ const executeTradingLogic = async (symbol, currentPrice, state) => {
         state.quantity = quantity;
         state.targetSellPrice = currentPrice * (1 + ROI_PERCENTAGE / 100);
 
-        logToFile(`✅ BOUGHT ${quantity} ${state.name} at $${currentPrice.toFixed(6)}`, "TRADE");
-        logToFile(`🎯 Target sell price: $${state.targetSellPrice.toFixed(6)} (${ROI_PERCENTAGE}% ROI)`, "TRADE");
+        logToFile(
+          `✅ BOUGHT ${quantity} ${state.name} at $${currentPrice.toFixed(6)}`,
+          "TRADE"
+        );
+        logToFile(
+          `🎯 Target sell price: $${state.targetSellPrice.toFixed(
+            6
+          )} (${ROI_PERCENTAGE}% ROI)`,
+          "TRADE"
+        );
 
         saveTradeToFile({
           symbol: symbol,
@@ -532,12 +582,29 @@ const executeTradingLogic = async (symbol, currentPrice, state) => {
         const order = await placeOrder(symbol, "SELL", sellQuantity);
         if (order) {
           const profit = (currentPrice - state.buyPrice) * sellQuantity;
-          const roiAchieved = ((currentPrice - state.buyPrice) / state.buyPrice * 100);
+          const roiAchieved =
+            ((currentPrice - state.buyPrice) / state.buyPrice) * 100;
 
-          logToFile(`✅ SOLD ${sellQuantity} ${state.name} at $${currentPrice.toFixed(6)}`, "TRADE");
-          logToFile(`💰 ROI Achieved: ${roiAchieved.toFixed(2)}% | Profit: $${profit.toFixed(6)}`, "PROFIT");
+          logToFile(
+            `✅ SOLD ${sellQuantity} ${state.name} at $${currentPrice.toFixed(
+              6
+            )}`,
+            "TRADE"
+          );
+          logToFile(
+            `💰 ROI Achieved: ${roiAchieved.toFixed(
+              2
+            )}% | Profit: $${profit.toFixed(6)}`,
+            "PROFIT"
+          );
 
-          updateProfitStats(symbol, profit, state.buyPrice, currentPrice, sellQuantity);
+          updateProfitStats(
+            symbol,
+            profit,
+            state.buyPrice,
+            currentPrice,
+            sellQuantity
+          );
 
           state.position = null;
           state.buyPrice = null;
