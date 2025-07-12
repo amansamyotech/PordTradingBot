@@ -96,14 +96,14 @@ const placeOrder = async (side, qty) => {
       quantity: qty,
       timestamp: Date.now(),
     };
-    console.log(`params---->>>>>>>>>>>> place order   `,params);
-    
+    console.log(`params---->>>>>>>>>>>> place order   `, params);
+
     const sig = sign(params);
     const res = await axios.post(`${FUTURES_API_BASE}/fapi/v1/order`, null, {
       params: { ...params, signature: sig },
       headers: { "X-MBX-APIKEY": apiKey },
     });
-console.log(`place order response  ----`,res.data);
+    console.log(`place order response  ----`, res.data);
 
     return res.data;
   } catch (e) {
@@ -125,7 +125,7 @@ const startBot = async () => {
 
       console.log(`currentPrice >=`, currentPrice);
       console.log(`targetPrice`, targetPrice);
- console.log(`position  -- `, position);
+      console.log(`position  -- `, position);
       if (!position) {
         const balance = await getBalance();
         const buyAmount = balance;
@@ -142,6 +142,7 @@ const startBot = async () => {
           log(`⚠️ Buy amount too small: ${buyAmount.toFixed(2)} (minimum $5)`);
           await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
           // send telly message
+          position = "LONG";
           continue;
         }
 
@@ -150,7 +151,7 @@ const startBot = async () => {
           position = "LONG";
           buyPrice = currentPrice;
           targetPrice = currentPrice * (1 + PROFIT_PERCENTAGE / 100);
-          
+
           log(
             `✅ BOUGHT ${quantity} ${SYMBOL} @ ${currentPrice} | Target: ${targetPrice.toFixed(
               6
@@ -163,12 +164,12 @@ const startBot = async () => {
 
       // SELL - if have position and target reached
       else if (position === "LONG" && currentPrice >= targetPrice) {
-        console.log('enter into sell');
-        
+        console.log("enter into sell");
+
         // else if (position === "LONG") {
         const order = await placeOrder("SELL", quantity);
-        console.log('sell order placed', order);
-        
+        console.log("sell order placed", order);
+
         if (order && order.status === "FILLED") {
           const profit = (currentPrice - buyPrice) * quantity;
 
