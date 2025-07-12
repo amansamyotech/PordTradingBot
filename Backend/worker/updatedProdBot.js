@@ -11,11 +11,11 @@ const apiSecret =
 
 // Trading pairs configuration
 const TRADING_PAIRS = [
-  { symbol: "SHIBUSDT", asset: "SHIB", name: "Shiba Inu" },
+//   { symbol: "SHIBUSDT", asset: "SHIB", name: "Shiba Inu" },
   { symbol: "DOGEUSDT", asset: "DOGE", name: "Dogecoin" },
   { symbol: "PEPEUSDT", asset: "PEPE", name: "Pepe Coin" },
-  { symbol: "BONKUSDT", asset: "BONK", name: "Bonk" },
-  { symbol: "FLOKIUSDT", asset: "FLOKI", name: "Floki Inu" },
+//   { symbol: "BONKUSDT", asset: "BONK", name: "Bonk" },
+//   { symbol: "FLOKIUSDT", asset: "FLOKI", name: "Floki Inu" },
 ];
 
 const ROI_PERCENTAGE = 0.2; // 0.2% ROI target
