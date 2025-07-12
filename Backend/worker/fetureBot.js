@@ -109,10 +109,10 @@ const startBot = async () => {
       // BUY - if no position
       if (!position) {
         const balance = await getBalance();
-        const buyAmount = balance * 0.5; // 50% of balance
+        const buyAmount = balance
         quantity = parseFloat((buyAmount / currentPrice).toFixed(precision));
         
-        log(`💰 Balance: ${balance.toFixed(2)} | Buying with 50%: ${buyAmount.toFixed(2)}`);
+        log(`💰 Balance: ${balance.toFixed(2)} | Buying with ${buyAmount.toFixed(2)}`);
         
         // Check minimum order value (usually $5-10)
         if (buyAmount < 5) {
