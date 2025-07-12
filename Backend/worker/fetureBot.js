@@ -115,8 +115,8 @@ const startBot = async () => {
   while (true) {
     try {
       const currentPrice = await getPrice();
-      position = "LONG";
-      quantity = 100
+    //   position = "LONG";
+    //   quantity = 100
       // BUY - if no position
       if (!position) {
         const balance = await getBalance();
@@ -154,8 +154,8 @@ const startBot = async () => {
       }
 
       // SELL - if have position and target reached
-    //   else if (position === "LONG" && currentPrice >= targetPrice) {
-      else if (position === "LONG") {
+       else if (position === "LONG" && currentPrice >= targetPrice) {
+     // else if (position === "LONG") {
         const order = await placeOrder("SELL", quantity);
         if (order && order.status === "FILLED") {
           const profit = (currentPrice - buyPrice) * quantity;
