@@ -115,9 +115,13 @@ const startBot = async () => {
   while (true) {
     try {
       const currentPrice = await getPrice();
-    //   position = "LONG";
-    //   quantity = 100
+      //   position = "LONG";
+      //   quantity = 100
       // BUY - if no position
+
+      console.log(`currentPrice >=`, currentPrice);
+      console.log(`targetPrice`, targetPrice);
+
       if (!position) {
         const balance = await getBalance();
         const buyAmount = balance;
@@ -142,7 +146,7 @@ const startBot = async () => {
           position = "LONG";
           buyPrice = currentPrice;
           targetPrice = currentPrice * (1 + PROFIT_PERCENTAGE / 100);
-
+          
           log(
             `✅ BOUGHT ${quantity} ${SYMBOL} @ ${currentPrice} | Target: ${targetPrice.toFixed(
               6
@@ -154,8 +158,8 @@ const startBot = async () => {
       }
 
       // SELL - if have position and target reached
-       else if (position === "LONG" && currentPrice >= targetPrice) {
-     // else if (position === "LONG") {
+      else if (position === "LONG" && currentPrice >= targetPrice) {
+        // else if (position === "LONG") {
         const order = await placeOrder("SELL", quantity);
         if (order && order.status === "FILLED") {
           const profit = (currentPrice - buyPrice) * quantity;
