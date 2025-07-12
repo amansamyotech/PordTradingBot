@@ -315,13 +315,22 @@ const getAllBalances = async () => {
 const getSymbolFilters = async (symbol) => {
   try {
     const response = await axios.get(
-      "https://api.binance.com/api/v3/exchangeInfo",
-      {
-        params: { symbol },
-      }
+      "https://api.binance.com/api/v3/exchangeInfo"
+    );
+    const symbolInfo = response.data.symbols.find(
+      (s) => s.symbol === symbol.toUpperCase()
     );
 
-    const symbolInfo = response.data.symbols[0];
+    if (!symbolInfo) {
+      logToFile(`Symbol info not found for ${symbol}`, "ERROR");
+      return {
+        stepSize: 0.000001,
+        minQty: 0,
+        minNotional: 0,
+        quantityPrecision: 6,
+      };
+    }
+
     const lotSizeFilter = symbolInfo.filters.find(
       (f) => f.filterType === "LOT_SIZE"
     );
