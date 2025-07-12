@@ -76,7 +76,7 @@ const setMarginType = async () => {
 
 const placeOrder = async (side, qty) => {
   try {
-    await setMarginType();
+    // await setMarginType();
     await setLeverage();
 
     const params = {
