@@ -173,6 +173,7 @@ const distributeBalanceEqually = async () => {
     `Distributed $${total.toFixed(2)} equally across coins.`,
     "BALANCE"
   );
+  sendTelegram(`Distributed $${total.toFixed(2)} equally across coins.`);
 };
 
 const executeTradingLogic = async (symbol, price) => {
@@ -194,6 +195,7 @@ const executeTradingLogic = async (symbol, price) => {
         state.availableForTrading = 0;
         state.lastTradeTime = Date.now();
         logToFile(`Bought ${qty} ${symbol} @ ${avgPrice}`, "TRADE");
+        sendTelegram(`✅Bought ${qty} ${symbol} @ ${avgPrice}`);
       }
     } else if (state.position === "long" && price >= state.targetSellPrice) {
       const order = await placeOrder(symbol, "SELL", state.quantity);
@@ -224,6 +226,10 @@ const executeTradingLogic = async (symbol, price) => {
           `Sold ${symbol} @ ${sellPrice} | Profit: $${profit.toFixed(2)}`,
           "PROFIT"
         );
+        sendTelegram(
+          `🎯 Sold ${symbol} @ ${sellPrice} | Profit: $${profit.toFixed(2)}`,
+          "PROFIT"
+        );
       }
     }
   } catch (e) {
@@ -252,6 +258,7 @@ const startTrading = async () => {
 
 process.on("SIGINT", async () => {
   logToFile("Bot stopped manually", "SYSTEM");
+  sendTelegram("Bot stopped");
   fs.writeFileSync(profitFile, JSON.stringify(overallStats, null, 2));
   process.exit(0);
 });
