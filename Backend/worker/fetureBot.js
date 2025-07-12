@@ -5,8 +5,7 @@ const FUTURES_API_BASE = "https://fapi.binance.com";
 const apiKey = "6bd1UA2kXR2lgLPv1pt9bNEOJE70h1MbXMvmoH1SceWUNw0kvXAQEdigQUgfNprI";
 const apiSecret = "4zHQjwWb8AopnJx0yPjTKBNpW3ntoLaNK7PnbJjxwoB8ZSeaAaGTRLdIKLsixmPR";
 
-// const SYMBOL = "DOGEUSDT";
-const SYMBOL = "SHIBUSDT";
+const SYMBOL = "DOGEUSDT";
 const PROFIT_PERCENTAGE = 0.01; // 0.01%
 
 let position = null;
