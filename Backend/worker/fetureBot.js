@@ -116,7 +116,7 @@ const startBot = async () => {
     try {
       const currentPrice = await getPrice();
       position = "LONG";
-      quantity = 258
+      quantity = 100
       // BUY - if no position
       if (!position) {
         const balance = await getBalance();
