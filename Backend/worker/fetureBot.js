@@ -125,7 +125,7 @@ const startBot = async () => {
 
       console.log(`currentPrice >=`, currentPrice);
       console.log(`targetPrice`, targetPrice);
-
+ console.log(`position  -- `, position);
       if (!position) {
         const balance = await getBalance();
         const buyAmount = balance;
