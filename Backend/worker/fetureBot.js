@@ -5,23 +5,13 @@ const FUTURES_API_BASE = "https://fapi.binance.com";
 const apiKey = "6bd1UA2kXR2lgLPv1pt9bNEOJE70h1MbXMvmoH1SceWUNw0kvXAQEdigQUgfNprI";
 const apiSecret = "4zHQjwWb8AopnJx0yPjTKBNpW3ntoLaNK7PnbJjxwoB8ZSeaAaGTRLdIKLsixmPR";
 
-const TRADING_PAIRS = [
-  { symbol: "DOGEUSDT", name: "Dogecoin" },
-];
+const SYMBOL = "DOGEUSDT";
+const PROFIT_PERCENTAGE = 0.01; // 0.01%
 
-const PROFIT_PERCENTAGE = 0.01; // 0.01% profit
-const CHECK_INTERVAL = 2000; // Check every 2 seconds
-
-let tradingState = {};
-TRADING_PAIRS.forEach((pair) => {
-  tradingState[pair.symbol] = {
-    position: null,
-    buyPrice: 0,
-    quantity: 0,
-    targetPrice: 0,
-    isTrading: false,
-  };
-});
+let position = null;
+let buyPrice = 0;
+let quantity = 0;
+let targetPrice = 0;
 
 const log = (msg) => {
   console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -39,146 +29,93 @@ const getBalance = async () => {
     params: { ...params, signature: sig },
     headers: { "X-MBX-APIKEY": apiKey },
   });
-  return parseFloat(
-    res.data.assets.find((a) => a.asset === "USDT").availableBalance
-  );
+  return parseFloat(res.data.assets.find((a) => a.asset === "USDT").availableBalance);
 };
 
-const getPrice = async (symbol) => {
+const getPrice = async () => {
   const res = await axios.get(`${FUTURES_API_BASE}/fapi/v1/ticker/price`, {
-    params: { symbol }
+    params: { symbol: SYMBOL }
   });
   return parseFloat(res.data.price);
 };
 
-const getPrecision = async (symbol) => {
+const getPrecision = async () => {
   const res = await axios.get(`${FUTURES_API_BASE}/fapi/v1/exchangeInfo`);
-  const symbolInfo = res.data.symbols.find((s) => s.symbol === symbol);
-  const stepSize = symbolInfo.filters.find(
-    (f) => f.filterType === "LOT_SIZE"
-  ).stepSize;
+  const symbolInfo = res.data.symbols.find((s) => s.symbol === SYMBOL);
+  const stepSize = symbolInfo.filters.find((f) => f.filterType === "LOT_SIZE").stepSize;
   return Math.max(0, stepSize.indexOf("1") - 1);
 };
 
-const setLeverage = async (symbol, leverage) => {
+const placeOrder = async (side, qty) => {
   const params = {
-    symbol,
-    leverage,
+    symbol: SYMBOL,
+    side,
+    type: "MARKET",
+    quantity: qty,
     timestamp: Date.now(),
   };
   const sig = sign(params);
-  await axios.post(`${FUTURES_API_BASE}/fapi/v1/leverage`, null, {
+  const res = await axios.post(`${FUTURES_API_BASE}/fapi/v1/order`, null, {
     params: { ...params, signature: sig },
     headers: { "X-MBX-APIKEY": apiKey },
   });
-};
-
-const setMarginType = async (symbol) => {
-  const params = {
-    symbol,
-    marginType: "ISOLATED",
-    timestamp: Date.now(),
-  };
-  const sig = sign(params);
-  try {
-    await axios.post(`${FUTURES_API_BASE}/fapi/v1/marginType`, null, {
-      params: { ...params, signature: sig },
-      headers: { "X-MBX-APIKEY": apiKey },
-    });
-  } catch (_) {}
-};
-
-const placeOrder = async (symbol, side, qty) => {
-  try {
-    await setMarginType(symbol);
-    await setLeverage(symbol, 1);
-
-    const params = {
-      symbol,
-      side,
-      type: "MARKET",
-      quantity: qty,
-      timestamp: Date.now(),
-    };
-    const sig = sign(params);
-    const res = await axios.post(`${FUTURES_API_BASE}/fapi/v1/order`, null, {
-      params: { ...params, signature: sig },
-      headers: { "X-MBX-APIKEY": apiKey },
-    });
-    return res.data;
-  } catch (e) {
-    log(`Order error on ${symbol} ${side}: ${e.message}`);
-    return null;
-  }
-};
-
-const trade = async (symbol) => {
-  const state = tradingState[symbol];
-  if (state.isTrading) return;
-
-  state.isTrading = true;
-
-  try {
-    const currentPrice = await getPrice(symbol);
-    const precision = await getPrecision(symbol);
-
-    // If no position, buy
-    if (!state.position) {
-      const balance = await getBalance();
-      if (balance > 10) { // Only trade if we have more than $10
-        const qty = parseFloat((balance * 0.9 / currentPrice).toFixed(precision)); // Use 90% of balance
-        
-        const order = await placeOrder(symbol, "BUY", qty);
-        if (order && order.status === "FILLED") {
-          state.buyPrice = currentPrice;
-          state.quantity = qty;
-          state.position = "LONG";
-          state.targetPrice = currentPrice * (1 + PROFIT_PERCENTAGE / 100);
-          
-          log(`✅ BOUGHT ${qty} ${symbol} @ $${currentPrice} | Target: $${state.targetPrice.toFixed(6)}`);
-        }
-      }
-    }
-    // If have position and price reached target, sell
-    else if (state.position === "LONG" && currentPrice >= state.targetPrice) {
-      const order = await placeOrder(symbol, "SELL", state.quantity);
-      if (order && order.status === "FILLED") {
-        const profit = (currentPrice - state.buyPrice) * state.quantity;
-        
-        log(`🎯 SOLD ${state.quantity} ${symbol} @ $${currentPrice} | Profit: $${profit.toFixed(4)}`);
-        
-        // Reset position
-        state.position = null;
-        state.quantity = 0;
-        state.buyPrice = 0;
-        state.targetPrice = 0;
-      }
-    }
-  } catch (e) {
-    log(`Trading error on ${symbol}: ${e.message}`);
-  }
-
-  state.isTrading = false;
+  return res.data;
 };
 
 const startBot = async () => {
-  log("🚀 Starting 0.01% Profit Trading Bot...");
+  log("🚀 Starting Bot...");
+  const precision = await getPrecision();
   
   while (true) {
     try {
-      for (const { symbol } of TRADING_PAIRS) {
-        await trade(symbol);
+      const currentPrice = await getPrice();
+      
+      // BUY - if no position
+      if (!position) {
+        const balance = await getBalance();
+        const buyAmount = balance * 0.5; // 50% of balance
+        quantity = parseFloat((buyAmount / currentPrice).toFixed(precision));
+        
+        log(`💰 Balance: $${balance.toFixed(2)} | Buying with 50%: $${buyAmount.toFixed(2)}`);
+        
+        const order = await placeOrder("BUY", quantity);
+        if (order.status === "FILLED") {
+          position = "LONG";
+          buyPrice = currentPrice;
+          targetPrice = currentPrice * (1 + PROFIT_PERCENTAGE / 100);
+          
+          log(`✅ BOUGHT ${quantity} ${SYMBOL} @ $${currentPrice} | Target: $${targetPrice.toFixed(6)}`);
+        }
       }
+      
+      // SELL - if have position and target reached
+      else if (position === "LONG" && currentPrice >= targetPrice) {
+        const order = await placeOrder("SELL", quantity);
+        if (order.status === "FILLED") {
+          const profit = (currentPrice - buyPrice) * quantity;
+          
+          log(`🎯 SOLD ${quantity} ${SYMBOL} @ $${currentPrice} | Profit: $${profit.toFixed(4)}`);
+          
+          // Reset for next cycle
+          position = null;
+          buyPrice = 0;
+          quantity = 0;
+          targetPrice = 0;
+        }
+      }
+      
+      // Status update
+      else if (position === "LONG") {
+        const currentProfit = (currentPrice - buyPrice) * quantity;
+        log(`📊 Holding ${quantity} ${SYMBOL} | Current: $${currentPrice} | Target: $${targetPrice.toFixed(6)} | Profit: $${currentProfit.toFixed(4)}`);
+      }
+      
     } catch (e) {
-      log(`Loop error: ${e.message}`);
+      log(`❌ Error: ${e.message}`);
     }
-    await new Promise((resolve) => setTimeout(resolve, CHECK_INTERVAL));
+    
+    await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
   }
 };
-
-process.on("SIGINT", () => {
-  log("Bot stopped manually");
-  process.exit();
-});
 
 startBot();
