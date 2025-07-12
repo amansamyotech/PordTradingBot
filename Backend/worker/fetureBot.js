@@ -46,20 +46,56 @@ const getPrecision = async () => {
   return Math.max(0, stepSize.indexOf("1") - 1);
 };
 
-const placeOrder = async (side, qty) => {
+const setLeverage = async () => {
   const params = {
     symbol: SYMBOL,
-    side,
-    type: "MARKET",
-    quantity: qty,
+    leverage: 1,
     timestamp: Date.now(),
   };
   const sig = sign(params);
-  const res = await axios.post(`${FUTURES_API_BASE}/fapi/v1/order`, null, {
+  await axios.post(`${FUTURES_API_BASE}/fapi/v1/leverage`, null, {
     params: { ...params, signature: sig },
     headers: { "X-MBX-APIKEY": apiKey },
   });
-  return res.data;
+};
+
+const setMarginType = async () => {
+  const params = {
+    symbol: SYMBOL,
+    marginType: "ISOLATED",
+    timestamp: Date.now(),
+  };
+  const sig = sign(params);
+  try {
+    await axios.post(`${FUTURES_API_BASE}/fapi/v1/marginType`, null, {
+      params: { ...params, signature: sig },
+      headers: { "X-MBX-APIKEY": apiKey },
+    });
+  } catch (_) {}
+};
+
+const placeOrder = async (side, qty) => {
+  try {
+    await setMarginType();
+    await setLeverage();
+
+    const params = {
+      symbol: SYMBOL,
+      side,
+      type: "MARKET",
+      quantity: qty,
+      timestamp: Date.now(),
+    };
+    const sig = sign(params);
+    const res = await axios.post(`${FUTURES_API_BASE}/fapi/v1/order`, null, {
+      params: { ...params, signature: sig },
+      headers: { "X-MBX-APIKEY": apiKey },
+    });
+    return res.data;
+  } catch (e) {
+    log(`❌ Order Error: ${e.response?.data?.msg || e.message}`);
+    return null;
+  }
 };
 
 const startBot = async () => {
@@ -76,31 +112,42 @@ const startBot = async () => {
         const buyAmount = balance * 0.5; // 50% of balance
         quantity = parseFloat((buyAmount / currentPrice).toFixed(precision));
         
-        log(`💰 Balance: $${balance.toFixed(2)} | Buying with 50%: $${buyAmount.toFixed(2)}`);
+        log(`💰 Balance: ${balance.toFixed(2)} | Buying with 50%: ${buyAmount.toFixed(2)}`);
+        
+        // Check minimum order value (usually $5-10)
+        if (buyAmount < 5) {
+          log(`⚠️ Buy amount too small: ${buyAmount.toFixed(2)} (minimum $5)`);
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+          continue;
+        }
         
         const order = await placeOrder("BUY", quantity);
-        if (order.status === "FILLED") {
+        if (order && order.status === "FILLED") {
           position = "LONG";
           buyPrice = currentPrice;
           targetPrice = currentPrice * (1 + PROFIT_PERCENTAGE / 100);
           
-          log(`✅ BOUGHT ${quantity} ${SYMBOL} @ $${currentPrice} | Target: $${targetPrice.toFixed(6)}`);
+          log(`✅ BOUGHT ${quantity} ${SYMBOL} @ ${currentPrice} | Target: ${targetPrice.toFixed(6)}`);
+        } else if (order === null) {
+          log(`❌ Buy order failed`);
         }
       }
       
       // SELL - if have position and target reached
       else if (position === "LONG" && currentPrice >= targetPrice) {
         const order = await placeOrder("SELL", quantity);
-        if (order.status === "FILLED") {
+        if (order && order.status === "FILLED") {
           const profit = (currentPrice - buyPrice) * quantity;
           
-          log(`🎯 SOLD ${quantity} ${SYMBOL} @ $${currentPrice} | Profit: $${profit.toFixed(4)}`);
+          log(`🎯 SOLD ${quantity} ${SYMBOL} @ ${currentPrice} | Profit: ${profit.toFixed(4)}`);
           
           // Reset for next cycle
           position = null;
           buyPrice = 0;
           quantity = 0;
           targetPrice = 0;
+        } else if (order === null) {
+          log(`❌ Sell order failed`);
         }
       }
       
