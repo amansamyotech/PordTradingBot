@@ -167,7 +167,9 @@ const startBot = async () => {
         console.log("enter into sell");
 
         // else if (position === "LONG") {
-        const order = await placeOrder("SELL", quantity);
+        //const order = await placeOrder("SELL", quantity);
+        const order = await placeOrder("SELL", 100);
+
         console.log("sell order placed", order);
 
         if (order && order.status === "FILLED") {
