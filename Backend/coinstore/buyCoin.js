@@ -1,11 +1,11 @@
 const axios = require("axios");
 const crypto = require("crypto");
 
-const FUTURES_API_BASE = "https://api.coinstore.com";
+const FUTURES_API_BASE = "https://api.coinstore.com/api";
 const apiKey = "460e56f22bedb4cbb9908603dcd6f7b1";
 const apiSecret = "31e4c0d4d894de2250c4e0c152cb8158";
 
-const SYMBOL = "DOGEUSDT";
+const SYMBOL = "BTCUSDT";
 // const SYMBOL = "PEPEUSDT";
 // const SYMBOL = "SHIBUSDT";
 // const SYMBOL = "BONKUSDT";
@@ -40,7 +40,7 @@ const sign = (method, endpoint, params = {}) => {
 
 const getBalance = async () => {
   try {
-    const endpoint = "/v1/account/balances";
+    const endpoint = "/account/balances";
     const { timestamp, signature } = sign("GET", endpoint);
 
     const res = await axios.get(`${FUTURES_API_BASE}${endpoint}`, {
@@ -64,7 +64,7 @@ const getBalance = async () => {
 
 const getPrice = async () => {
   try {
-    const res = await axios.get(`${FUTURES_API_BASE}/v1/market/ticker`, {
+    const res = await axios.get(`${FUTURES_API_BASE}/market/ticker`, {
       params: { symbol: SYMBOL },
     });
     return parseFloat(res.data.data.c); // 'c' is the current price in Coinstore
@@ -76,7 +76,7 @@ const getPrice = async () => {
 
 const getSymbolInfo = async () => {
   try {
-    const res = await axios.get(`${FUTURES_API_BASE}/v1/market/symbols`);
+    const res = await axios.get(`${FUTURES_API_BASE}/market/symbols`);
     const symbolInfo = res.data.data.find((s) => s.symbol === SYMBOL);
     return symbolInfo;
   } catch (e) {
@@ -95,7 +95,7 @@ const getPrecision = async () => {
 
 const placeOrder = async (side, qty) => {
   try {
-    const endpoint = "/v1/trade/order/place";
+    const endpoint = "/trade/order/place";
     const params = {
       symbol: SYMBOL,
       side: side.toLowerCase(), // Coinstore uses lowercase
@@ -126,7 +126,7 @@ const placeOrder = async (side, qty) => {
 
 const getOrderStatus = async (orderId) => {
   try {
-    const endpoint = "/v1/trade/order/active";
+    const endpoint = "/trade/order/active";
     const params = { orderId: orderId };
     const { timestamp, signature } = sign("GET", endpoint, params);
 
