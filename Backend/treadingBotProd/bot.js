@@ -7,7 +7,7 @@ const apiKey =
 const apiSecret =
   "4zHQjwWb8AopnJx0yPjTKBNpW3ntoLaNK7PnbJjxwoB8ZSeaAaGTRLdIKLsixmPR";
 
-const SYMBOLS = ["DOGEUSDT", "1000PEPEUSDT"];
+const SYMBOLS = ["DOGEUSDT"];
 
 const MIN_BALANCE = 5; // Step 1: Balance should be > $5
 const TRADE_AMOUNT = 6; // Step 2: $6 per trade
