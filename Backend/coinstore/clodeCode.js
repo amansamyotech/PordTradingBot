@@ -1,6 +1,6 @@
 const axios = require("axios");
 const crypto = require("crypto");
-const JSON = require("json");
+// const JSON = require("json");
 
 const SPOT_API_BASE = "https://api.coinstore.com";
 const apiKey = "460e56f22bedb4cbb9908603dcd6f7b1"; 
