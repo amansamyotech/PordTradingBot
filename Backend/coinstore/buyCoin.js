@@ -105,6 +105,15 @@ const getSymbolInfo = async () => {
     return null;
   }
 };
+
+const testConnection = async () => {
+  try {
+    const res = await axios.get(`${FUTURES_API_BASE}/market/ticker?symbol=BTCUSDT`);
+    console.log("Public endpoint works:", res.data);
+  } catch (e) {
+    console.log("Public endpoint error:", e.response?.data || e.message);
+  }
+};
 const getPrecision = async () => {
   const symbolInfo = await getSymbolInfo();
   if (symbolInfo) {
@@ -290,4 +299,5 @@ const startBot = async () => {
 
 // startBot();
 
-getSymbolInfo();
+// getSymbolInfo();
+testConnection()
