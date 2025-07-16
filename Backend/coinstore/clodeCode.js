@@ -1,10 +1,9 @@
 const axios = require("axios");
 const crypto = require("crypto");
-// const JSON = require("json");
 
 const SPOT_API_BASE = "https://api.coinstore.com";
-const apiKey = "460e56f22bedb4cbb9908603dcd6f7b1"; 
-const secretKey = "31e4c0d4d894de2250c4e0c152cb8158"; 
+const apiKey = "460e56f22bedb4cbb9908603dcd6f7b1";
+const secretKey = "31e4c0d4d894de2250c4e0c152cb8158";
 
 const SYMBOL = "DOGEUSDT";
 const PROFIT_PERCENTAGE = 0.01; // 0.01%
@@ -22,16 +21,18 @@ const sign = (payload, expires) => {
   const expiresKey = Math.floor(expires / 30000).toString();
   const key = crypto
     .createHmac("sha256", secretKey)
-    .update(expiresKey)
+    .update(expiresKey, "utf8")
     .digest("hex");
-  return crypto.createHmac("sha256", key).update(payload).digest("hex");
+  return crypto
+    .createHmac("sha256", key)
+    .update(payload, "utf8")
+    .digest("hex");
 };
 
 const getBalance = async () => {
   const url = `${SPOT_API_BASE}/api/spot/accountList`;
   const expires = Date.now();
   const payload = JSON.stringify({});
-
   const headers = {
     "X-CS-APIKEY": apiKey,
     "X-CS-SIGN": sign(payload, expires),
@@ -44,27 +45,32 @@ const getBalance = async () => {
 
   try {
     const res = await axios.post(url, payload, { headers });
+    if (res.data.code !== 0) {
+      log(`❌ Balance Error: ${res.data.message || "Unknown error"}`);
+      return 0;
+    }
     const usdtAccount = res.data.data.find(
       (a) => a.currency === "USDT" && a.type === 1
     );
-    return parseFloat(usdtAccount.balance);
+    return parseFloat(usdtAccount?.balance || 0);
   } catch (e) {
-    log(`❌ Balance Error: ${e.response?.data?.msg || e.message}`);
+    log(`❌ Balance Error: ${JSON.stringify(e.response?.data || e.message)}`);
     return 0;
   }
 };
 
 const getPrice = async () => {
-  const url = `${SPOT_API_BASE}/api/v2/public/ticker`;
+  const url = `${SPOT_API_BASE}/api/v2/public/ticker?symbolCode=${SYMBOL}`;
   try {
-    const res = await axios.get(url, {
-      params: { symbolCode: SYMBOL },
-    });
-    return parseFloat(
-      res.data.data.find((s) => s.symbolCode === SYMBOL).lastPrice
-    );
+    const res = await axios.get(url);
+    if (res.data.code !== 0) {
+      log(`❌ Price Error: ${res.data.message || "Unknown error"}`);
+      return 0;
+    }
+    const ticker = res.data.data.find((s) => s.symbolCode === SYMBOL);
+    return parseFloat(ticker?.lastPrice || 0);
   } catch (e) {
-    log(`❌ Price Error: ${e.response?.data?.msg || e.message}`);
+    log(`❌ Price Error: ${JSON.stringify(e.response?.data || e.message)}`);
     return 0;
   }
 };
@@ -77,7 +83,7 @@ const getPrecision = async () => {
     const stepSize = symbolInfo.quantityPrecision;
     return parseInt(stepSize);
   } catch (e) {
-    log(`❌ Precision Error: ${e.response?.data?.msg || e.message}`);
+    log(`❌ Precision Error: ${JSON.stringify(e.response?.data || e.message)}`);
     return 0;
   }
 };
@@ -112,9 +118,10 @@ const placeOrder = async (side, qty, price) => {
         orderId: res.data.data.orderId,
       };
     }
+    log(`❌ Order Error: ${res.data.message || "Unknown error"}`);
     return null;
   } catch (e) {
-    log(`❌ Order Error: ${e.response?.data?.msg || e.message}`);
+    log(`❌ Order Error: ${JSON.stringify(e.response?.data || e.message)}`);
     return null;
   }
 };
@@ -189,7 +196,7 @@ const startBot = async () => {
         );
       }
     } catch (e) {
-      log(`❌ Error: ${e.message}`);
+      log(`❌ Error: ${JSON.stringify(e.response?.data || e.message)}`);
     }
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
