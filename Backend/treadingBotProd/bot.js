@@ -10,7 +10,7 @@ const apiSecret =
 const SYMBOLS = ["DOGEUSDT", "1000PEPEUSDT"];
 
 const MIN_BALANCE = 5; // Step 1: Balance should be > $5
-const TRADE_AMOUNT = 5; // Step 2: $6 per trade
+const TRADE_AMOUNT = 6; // Step 2: $6 per trade
 const PROFIT_TARGET = 0.01; // Step 4: 2% profit target
 
 let coinStates = {}; // Store state per symbol
