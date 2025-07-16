@@ -37,10 +37,7 @@ const sign = (payload, expires) => {
     .createHmac("sha256", secretKey)
     .update(expiresKey, "utf8")
     .digest("hex");
-  return crypto
-    .createHmac("sha256", key)
-    .update(payload, "utf8")
-    .digest("hex");
+  return crypto.createHmac("sha256", key).update(payload, "utf8").digest("hex");
 };
 
 const getBalance = async () => {
@@ -187,7 +184,9 @@ const startBot = async () => {
           continue;
         }
 
-        const order = await retry(() => placeOrder("BUY", quantity, currentPrice));
+        const order = await retry(() =>
+          placeOrder("BUY", quantity, currentPrice)
+        );
         if (order && order.status === "FILLED") {
           position = "LONG";
           buyPrice = currentPrice;
@@ -202,7 +201,9 @@ const startBot = async () => {
           log(`❌ Buy order failed`);
         }
       } else if (position === "LONG" && currentPrice >= targetPrice) {
-        const order = await retry(() => placeOrder("SELL", quantity, currentPrice));
+        const order = await retry(() =>
+          placeOrder("SELL", quantity, currentPrice)
+        );
 
         if (order && order.status === "FILLED") {
           const profit = (currentPrice - buyPrice) * quantity;

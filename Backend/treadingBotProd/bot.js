@@ -2,14 +2,16 @@ const axios = require("axios");
 const crypto = require("crypto");
 
 const FUTURES_API_BASE = "https://fapi.binance.com";
-const apiKey = "6bd1UA2kXR2lgLPv1pt9bNEOJE70h1MbXMvmoH1SceWUNw0kvXAQEdigQUgfNprI";
-const apiSecret = "4zHQjwWb8AopnJx0yPjTKBNpW3ntoLaNK7PnbJjxwoB8ZSeaAaGTRLdIKLsixmPR";
+const apiKey =
+  "6bd1UA2kXR2lgLPv1pt9bNEOJE70h1MbXMvmoH1SceWUNw0kvXAQEdigQUgfNprI";
+const apiSecret =
+  "4zHQjwWb8AopnJx0yPjTKBNpW3ntoLaNK7PnbJjxwoB8ZSeaAaGTRLdIKLsixmPR";
 
-const SYMBOLS = ["DOGEUSDT", "1000PEPEUSDT"]; 
+const SYMBOLS = ["DOGEUSDT", "1000PEPEUSDT"];
 
 const MIN_BALANCE = 5; // Step 1: Balance should be > $5
 const TRADE_AMOUNT = 6; // Step 2: $6 per trade
-const PROFIT_TARGET = 0.03; // Step 4: 2% profit target
+const PROFIT_TARGET = 0.01; // Step 4: 2% profit target
 
 let coinStates = {}; // Store state per symbol
 let pendingOrders = {}; // Track pending orders to prevent duplicates
@@ -38,7 +40,9 @@ const getPrecisionMap = async () => {
   const precisionMap = {};
   SYMBOLS.forEach((symbol) => {
     const info = res.data.symbols.find((s) => s.symbol === symbol);
-    const stepSize = info.filters.find(f => f.filterType === "LOT_SIZE").stepSize;
+    const stepSize = info.filters.find(
+      (f) => f.filterType === "LOT_SIZE"
+    ).stepSize;
     const precision = Math.max(0, stepSize.indexOf("1") - 1);
     precisionMap[symbol] = precision;
   });
@@ -75,12 +79,12 @@ const getCurrentPositions = async () => {
     });
 
     const positions = {};
-    res.data.forEach(pos => {
+    res.data.forEach((pos) => {
       if (SYMBOLS.includes(pos.symbol) && parseFloat(pos.positionAmt) > 0) {
         positions[pos.symbol] = {
           quantity: parseFloat(pos.positionAmt),
           entryPrice: parseFloat(pos.entryPrice),
-          unrealizedPnl: parseFloat(pos.unRealizedProfit)
+          unrealizedPnl: parseFloat(pos.unRealizedProfit),
         };
       }
     });
@@ -114,28 +118,33 @@ const placeOrder = async (symbol, side, quantity) => {
 
 const waitForOrderFill = async (symbol, orderId, maxWaitTime = 30000) => {
   const startTime = Date.now();
-  
+
   while (Date.now() - startTime < maxWaitTime) {
     const orderStatus = await checkOrderStatus(symbol, orderId);
-    
+
     if (!orderStatus) {
       log(`❌ Failed to check order status for ${symbol}`);
       return null;
     }
-    
+
     if (orderStatus.status === "FILLED") {
       return orderStatus;
     }
-    
-    if (orderStatus.status === "CANCELED" || orderStatus.status === "REJECTED") {
+
+    if (
+      orderStatus.status === "CANCELED" ||
+      orderStatus.status === "REJECTED"
+    ) {
       log(`❌ Order ${orderStatus.status} for ${symbol}`);
       return null;
     }
-    
-    log(`⏳ Waiting for ${symbol} order to fill... Status: ${orderStatus.status}`);
-    await new Promise(res => setTimeout(res, 2000));
+
+    log(
+      `⏳ Waiting for ${symbol} order to fill... Status: ${orderStatus.status}`
+    );
+    await new Promise((res) => setTimeout(res, 2000));
   }
-  
+
   log(`⏰ Order fill timeout for ${symbol}`);
   return null;
 };
@@ -149,7 +158,7 @@ const tradeBot = async () => {
 
     if (balance < MIN_BALANCE) {
       log("❗ Balance too low for trading (< $5). Waiting...");
-      await new Promise(res => setTimeout(res, 5000));
+      await new Promise((res) => setTimeout(res, 5000));
       continue;
     }
 
@@ -164,9 +173,12 @@ const tradeBot = async () => {
       }
 
       try {
-        const res = await axios.get(`${FUTURES_API_BASE}/fapi/v1/ticker/price`, {
-          params: { symbol },
-        });
+        const res = await axios.get(
+          `${FUTURES_API_BASE}/fapi/v1/ticker/price`,
+          {
+            params: { symbol },
+          }
+        );
         currentPrice = parseFloat(res.data.price);
       } catch (err) {
         log(`❌ Price fetch failed for ${symbol}: ${err.message}`);
@@ -177,15 +189,21 @@ const tradeBot = async () => {
         // Check balance again right before placing order
         const currentBalance = await getBalance();
         if (currentBalance < TRADE_AMOUNT) {
-          log(`⚠️ Insufficient balance for ${symbol} (need $${TRADE_AMOUNT}, have $${currentBalance.toFixed(2)})`);
+          log(
+            `⚠️ Insufficient balance for ${symbol} (need $${TRADE_AMOUNT}, have $${currentBalance.toFixed(
+              2
+            )})`
+          );
           continue;
         }
 
-        const quantity = parseFloat((TRADE_AMOUNT / currentPrice).toFixed(precision));
-        
+        const quantity = parseFloat(
+          (TRADE_AMOUNT / currentPrice).toFixed(precision)
+        );
+
         // Mark as pending to prevent duplicate orders
         pendingOrders[symbol] = true;
-        
+
         const buyOrder = await placeOrder(symbol, "BUY", quantity);
 
         if (buyOrder) {
@@ -194,62 +212,98 @@ const tradeBot = async () => {
             coinStates[symbol] = {
               buyPrice: parseFloat(buyOrder.fills[0].price), // Use actual fill price
               quantity: parseFloat(buyOrder.executedQty),
-              targetPrice: parseFloat(buyOrder.fills[0].price) * (1 + PROFIT_TARGET),
+              targetPrice:
+                parseFloat(buyOrder.fills[0].price) * (1 + PROFIT_TARGET),
             };
-            log(`✅ BOUGHT ${buyOrder.executedQty} ${symbol} @ ${buyOrder.fills[0].price} | Target: ${coinStates[symbol].targetPrice.toFixed(6)}`);
+            log(
+              `✅ BOUGHT ${buyOrder.executedQty} ${symbol} @ ${
+                buyOrder.fills[0].price
+              } | Target: ${coinStates[symbol].targetPrice.toFixed(6)}`
+            );
           } else {
             // Order placed but not filled immediately
-            log(`⚠️ Order placed but not filled immediately for ${symbol} | OrderID: ${buyOrder.orderId}`);
-            
+            log(
+              `⚠️ Order placed but not filled immediately for ${symbol} | OrderID: ${buyOrder.orderId}`
+            );
+
             // Wait for order to fill
-            const filledOrder = await waitForOrderFill(symbol, buyOrder.orderId);
-            
+            const filledOrder = await waitForOrderFill(
+              symbol,
+              buyOrder.orderId
+            );
+
             if (filledOrder) {
               coinStates[symbol] = {
                 buyPrice: parseFloat(filledOrder.avgPrice),
                 quantity: parseFloat(filledOrder.executedQty),
-                targetPrice: parseFloat(filledOrder.avgPrice) * (1 + PROFIT_TARGET),
+                targetPrice:
+                  parseFloat(filledOrder.avgPrice) * (1 + PROFIT_TARGET),
               };
-              log(`✅ CONFIRMED FILLED ${filledOrder.executedQty} ${symbol} @ ${filledOrder.avgPrice} | Target: ${coinStates[symbol].targetPrice.toFixed(6)}`);
+              log(
+                `✅ CONFIRMED FILLED ${filledOrder.executedQty} ${symbol} @ ${
+                  filledOrder.avgPrice
+                } | Target: ${coinStates[symbol].targetPrice.toFixed(6)}`
+              );
             } else {
               log(`❌ Failed to confirm order fill for ${symbol}`);
             }
           }
         }
-        
+
         // Clear pending flag
         delete pendingOrders[symbol];
-        
       } else {
         // We have a position, check if we should sell
         const state = coinStates[symbol];
-        const priceChangePercent = ((currentPrice - state.buyPrice) / state.buyPrice * 100).toFixed(2);
+        const priceChangePercent = (
+          ((currentPrice - state.buyPrice) / state.buyPrice) *
+          100
+        ).toFixed(2);
 
-        log(`📊 ${symbol} | Buy: $${state.buyPrice.toFixed(6)} | Now: $${currentPrice.toFixed(6)} | Change: ${priceChangePercent}% | Target: $${state.targetPrice.toFixed(6)}`);
+        log(
+          `📊 ${symbol} | Buy: $${state.buyPrice.toFixed(
+            6
+          )} | Now: $${currentPrice.toFixed(
+            6
+          )} | Change: ${priceChangePercent}% | Target: $${state.targetPrice.toFixed(
+            6
+          )}`
+        );
 
         const profitPercent = (currentPrice - state.buyPrice) / state.buyPrice;
         if (profitPercent >= PROFIT_TARGET) {
           // Mark as pending to prevent issues
           pendingOrders[symbol] = true;
-          
+
           const sellOrder = await placeOrder(symbol, "SELL", state.quantity);
-          
+
           if (sellOrder) {
             if (sellOrder.status === "FILLED") {
               const sellPrice = parseFloat(sellOrder.fills[0].price);
               const profit = (sellPrice - state.buyPrice) * state.quantity;
-              log(`🎯 SOLD ${state.quantity} ${symbol} @ $${sellPrice.toFixed(6)} | Profit: $${profit.toFixed(4)}`);
+              log(
+                `🎯 SOLD ${state.quantity} ${symbol} @ $${sellPrice.toFixed(
+                  6
+                )} | Profit: $${profit.toFixed(4)}`
+              );
 
               delete coinStates[symbol];
               log(`🔄 ${symbol} cycle completed. Restarting from step 1...`);
             } else {
               // Wait for sell order to fill
-              const filledSellOrder = await waitForOrderFill(symbol, sellOrder.orderId);
-              
+              const filledSellOrder = await waitForOrderFill(
+                symbol,
+                sellOrder.orderId
+              );
+
               if (filledSellOrder) {
                 const sellPrice = parseFloat(filledSellOrder.avgPrice);
                 const profit = (sellPrice - state.buyPrice) * state.quantity;
-                log(`🎯 SOLD ${state.quantity} ${symbol} @ $${sellPrice.toFixed(6)} | Profit: $${profit.toFixed(4)}`);
+                log(
+                  `🎯 SOLD ${state.quantity} ${symbol} @ $${sellPrice.toFixed(
+                    6
+                  )} | Profit: $${profit.toFixed(4)}`
+                );
 
                 delete coinStates[symbol];
                 log(`🔄 ${symbol} cycle completed. Restarting from step 1...`);
@@ -258,14 +312,14 @@ const tradeBot = async () => {
               }
             }
           }
-          
+
           // Clear pending flag
           delete pendingOrders[symbol];
         }
       }
     }
-    
-    await new Promise(res => setTimeout(res, 2000));
+
+    await new Promise((res) => setTimeout(res, 2000));
   }
 };
 
@@ -278,15 +332,21 @@ const initStateFromBinance = async () => {
       quantity: pos.quantity,
       targetPrice: pos.entryPrice * (1 + PROFIT_TARGET),
     };
-    log(`♻️ Resumed position for ${symbol}: Qty ${pos.quantity}, Entry $${pos.entryPrice}`);
+    log(
+      `♻️ Resumed position for ${symbol}: Qty ${pos.quantity}, Entry $${pos.entryPrice}`
+    );
   }
 };
 
 log("🚀 Starting Trading Bot...");
-log(`📋 Settings: Min Balance: $${MIN_BALANCE}, Trade Amount: $${TRADE_AMOUNT}, Profit Target: ${PROFIT_TARGET * 100}%`);
+log(
+  `📋 Settings: Min Balance: $${MIN_BALANCE}, Trade Amount: $${TRADE_AMOUNT}, Profit Target: ${
+    PROFIT_TARGET * 100
+  }%`
+);
 
 initStateFromBinance().then(() => {
-  tradeBot().catch(err => {
+  tradeBot().catch((err) => {
     log(`💥 Bot crashed: ${err.message}`);
     process.exit(1);
   });
