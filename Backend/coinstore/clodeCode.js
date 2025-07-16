@@ -1,243 +1,199 @@
-const axios = require('axios');
-const crypto = require('crypto');
+const axios = require("axios");
+const crypto = require("crypto");
+const JSON = require("json");
 
-class CoinStoreTradingBot {
-  constructor(apiKey, apiSecret, baseUrl = 'https://api.coinstore.com') {
-    this.apiKey = apiKey;
-    this.apiSecret = apiSecret;
-    this.baseUrl = baseUrl;
-  }
+const SPOT_API_BASE = "https://api.coinstore.com";
+const apiKey = "460e56f22bedb4cbb9908603dcd6f7b1"; 
+const secretKey = "31e4c0d4d894de2250c4e0c152cb8158"; 
 
-  // Generate signature for authenticated requests
-  generateSignature(timestamp, method, path, body = '') {
-    const message = timestamp + method + path + body;
-    return crypto.createHmac('sha256', this.apiSecret).update(message).digest('hex');
-  }
+const SYMBOL = "DOGEUSDT";
+const PROFIT_PERCENTAGE = 0.01; // 0.01%
 
-  // Make authenticated API request
-  async makeAuthenticatedRequest(method, endpoint, params = {}) {
-    const timestamp = Date.now().toString();
-    const path = endpoint;
-    const body = method === 'POST' ? JSON.stringify(params) : '';
-    const signature = this.generateSignature(timestamp, method, path, body);
+let position = null;
+let buyPrice = 0;
+let quantity = 0;
+let targetPrice = 0;
 
-    const headers = {
-      'X-CS-APIKEY': this.apiKey,
-      'X-CS-SIGN': signature,
-      'X-CS-EXPIRES': timestamp,
-      'Content-Type': 'application/json',
-      'User-Agent': 'CoinStore-Trading-Bot/1.0'
-    };
+const log = (msg) => {
+  console.log(`[${new Date().toISOString()}] ${msg}`);
+};
 
-    const config = {
-      method,
-      url: `${this.baseUrl}${endpoint}`,
-      headers,
-      timeout: 10000
-    };
+const sign = (payload, expires) => {
+  const expiresKey = Math.floor(expires / 30000).toString();
+  const key = crypto
+    .createHmac("sha256", secretKey)
+    .update(expiresKey)
+    .digest("hex");
+  return crypto.createHmac("sha256", key).update(payload).digest("hex");
+};
 
-    if (method === 'POST') {
-      config.data = params;
-    } else if (method === 'GET' && Object.keys(params).length > 0) {
-      config.params = params;
-    }
+const getBalance = async () => {
+  const url = `${SPOT_API_BASE}/api/spot/accountList`;
+  const expires = Date.now();
+  const payload = JSON.stringify({});
 
-    try {
-      const response = await axios(config);
-      return response.data;
-    } catch (error) {
-      console.error('API Request Error:', error.response?.data || error.message);
-      throw error;
-    }
-  }
-
-  // Get account balance
-  async getBalance() {
-    try {
-      const response = await this.makeAuthenticatedRequest('GET', '/api/v1/account/balances');
-      return response.data;
-    } catch (error) {
-      console.error('Error getting balance:', error);
-      throw error;
-    }
-  }
-
-  // Get market ticker
-  async getTicker(symbol) {
-    try {
-      const response = await axios.get(`${this.baseUrl}/api/v1/market/ticker`, {
-        params: { symbol },
-        headers: {
-          'User-Agent': 'CoinStore-Trading-Bot/1.0'
-        }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error getting ticker:', error);
-      throw error;
-    }
-  }
-
-  // Place buy order
-  async buyOrder(symbol, quantity, price = null, type = 'MARKET') {
-    try {
-      const orderData = {
-        symbol,
-        side: 'BUY',
-        type,
-        quantity: quantity.toString()
-      };
-
-      if (type === 'LIMIT' && price) {
-        orderData.price = price.toString();
-      }
-
-      const response = await this.makeAuthenticatedRequest('POST', '/api/v1/trade/order/place', orderData);
-      console.log(`Buy order placed for ${symbol}: ${quantity} at ${price || 'market price'}`);
-      return response;
-    } catch (error) {
-      console.error('Error placing buy order:', error);
-      throw error;
-    }
-  }
-
-  // Place sell order
-  async sellOrder(symbol, quantity, price = null, type = 'MARKET') {
-    try {
-      const orderData = {
-        symbol,
-        side: 'SELL',
-        type,
-        quantity: quantity.toString()
-      };
-
-      if (type === 'LIMIT' && price) {
-        orderData.price = price.toString();
-      }
-
-      const response = await this.makeAuthenticatedRequest('POST', '/api/v1/trade/order/place', orderData);
-      console.log(`Sell order placed for ${symbol}: ${quantity} at ${price || 'market price'}`);
-      return response;
-    } catch (error) {
-      console.error('Error placing sell order:', error);
-      throw error;
-    }
-  }
-
-  // Get order status
-  async getOrderStatus(orderId) {
-    try {
-      const response = await this.makeAuthenticatedRequest('GET', '/api/v1/trade/order/active', {
-        orderId
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error getting order status:', error);
-      throw error;
-    }
-  }
-
-  // Cancel order
-  async cancelOrder(orderId) {
-    try {
-      const response = await this.makeAuthenticatedRequest('POST', '/api/v1/trade/order/cancel', {
-        orderId
-      });
-      console.log(`Order ${orderId} cancelled`);
-      return response;
-    } catch (error) {
-      console.error('Error cancelling order:', error);
-      throw error;
-    }
-  }
-
-  // Simple trading strategy example
-  async simpleMovingAverageStrategy(symbol, shortPeriod = 5, longPeriod = 20) {
-    try {
-      // Get recent price data (you'll need to implement this based on CoinStore's historical data endpoint)
-      const ticker = await this.getTicker(symbol);
-      const currentPrice = parseFloat(ticker.data.price);
-      
-      console.log(`Current price for ${symbol}: ${currentPrice}`);
-      
-      // Get account balance
-      const balance = await this.getBalance();
-      console.log('Account balance:', balance);
-      
-      // Simple example: buy if price is above a threshold, sell if below
-      // You should implement proper technical indicators here
-      
-      return {
-        currentPrice,
-        balance,
-        recommendation: 'HOLD' // Replace with actual strategy logic
-      };
-    } catch (error) {
-      console.error('Error in trading strategy:', error);
-      throw error;
-    }
-  }
-
-  // Start automated trading
-  async startTrading(symbol, interval = 60000) { // 1 minute interval
-    console.log(`Starting automated trading for ${symbol}`);
-    
-    const trade = async () => {
-      try {
-        const analysis = await this.simpleMovingAverageStrategy(symbol);
-        
-        // Implement your trading logic here
-        if (analysis.recommendation === 'BUY') {
-          // Place buy order
-          console.log('Buy signal detected');
-          // await this.buyOrder(symbol, quantity);
-        } else if (analysis.recommendation === 'SELL') {
-          // Place sell order
-          console.log('Sell signal detected');
-          // await this.sellOrder(symbol, quantity);
-        }
-        
-      } catch (error) {
-        console.error('Trading error:', error);
-      }
-    };
-
-    // Initial trade
-    await trade();
-    
-    // Set up interval trading
-    setInterval(trade, interval);
-  }
-}
-
-// Usage example
-async function main() {
-  const bot = new CoinStoreTradingBot(
-    '460e56f22bedb4cbb9908603dcd6f7b1',
-    '31e4c0d4d894de2250c4e0c152cb8158'
-  );
+  const headers = {
+    "X-CS-APIKEY": apiKey,
+    "X-CS-SIGN": sign(payload, expires),
+    "X-CS-EXPIRES": expires.toString(),
+    "exch-language": "en_US",
+    "Content-Type": "application/json",
+    Accept: "*/*",
+    Connection: "keep-alive",
+  };
 
   try {
-    // Test connection
-    const ticker = await bot.getTicker('BTCUSDT');
-    console.log('Ticker:', ticker);
-
-    // Get balance
-    const balance = await bot.getBalance();
-    console.log('Balance:', balance);
-
-    // Start automated trading (uncomment when ready)
-    await bot.startTrading('BTCUSDT', 60000); // 1 minute interval
-
-  } catch (error) {
-    console.error('Bot error:', error);
+    const res = await axios.post(url, payload, { headers });
+    const usdtAccount = res.data.data.find(
+      (a) => a.currency === "USDT" && a.type === 1
+    );
+    return parseFloat(usdtAccount.balance);
+  } catch (e) {
+    log(`❌ Balance Error: ${e.response?.data?.msg || e.message}`);
+    return 0;
   }
-}
+};
 
-// Export the class for use in other files
-module.exports = CoinStoreTradingBot;
+const getPrice = async () => {
+  const url = `${SPOT_API_BASE}/api/v2/public/ticker`;
+  try {
+    const res = await axios.get(url, {
+      params: { symbolCode: SYMBOL },
+    });
+    return parseFloat(
+      res.data.data.find((s) => s.symbolCode === SYMBOL).lastPrice
+    );
+  } catch (e) {
+    log(`❌ Price Error: ${e.response?.data?.msg || e.message}`);
+    return 0;
+  }
+};
 
-// Run if this file is executed directly
-if (require.main === module) {
-  main();
-}
+const getPrecision = async () => {
+  const url = `${SPOT_API_BASE}/v2/public/config/spot/symbols`;
+  try {
+    const res = await axios.post(url, { symbolCodes: [SYMBOL] });
+    const symbolInfo = res.data.data.find((s) => s.symbolCode === SYMBOL);
+    const stepSize = symbolInfo.quantityPrecision;
+    return parseInt(stepSize);
+  } catch (e) {
+    log(`❌ Precision Error: ${e.response?.data?.msg || e.message}`);
+    return 0;
+  }
+};
+
+const placeOrder = async (side, qty, price) => {
+  const url = `${SPOT_API_BASE}/api/trade/order/place`;
+  const expires = Date.now();
+
+  const payload = JSON.stringify({
+    symbol: SYMBOL,
+    side,
+    ordType: "MARKET",
+    ordQty: qty.toString(),
+    timestamp: expires,
+  });
+
+  const headers = {
+    "X-CS-APIKEY": apiKey,
+    "X-CS-SIGN": sign(payload, expires),
+    "X-CS-EXPIRES": expires.toString(),
+    "exch-language": "en_US",
+    "Content-Type": "application/json",
+    Accept: "*/*",
+    Connection: "keep-alive",
+  };
+
+  try {
+    const res = await axios.post(url, payload, { headers });
+    if (res.data.code === 0) {
+      return {
+        status: "FILLED",
+        orderId: res.data.data.orderId,
+      };
+    }
+    return null;
+  } catch (e) {
+    log(`❌ Order Error: ${e.response?.data?.msg || e.message}`);
+    return null;
+  }
+};
+
+const startBot = async () => {
+  log("🚀 Starting Bot...");
+  const precision = await getPrecision();
+
+  while (true) {
+    try {
+      const currentPrice = await getPrice();
+      console.log(`currentPrice >=`, currentPrice);
+      console.log(`targetPrice`, targetPrice);
+      console.log(`position  -- `, position);
+
+      if (!position) {
+        const balance = await getBalance();
+        const buyAmount = balance;
+        quantity = parseFloat((buyAmount / currentPrice).toFixed(precision));
+
+        log(
+          `💰 Balance: ${balance.toFixed(2)} | Buying with ${buyAmount.toFixed(
+            2
+          )}`
+        );
+
+        if (buyAmount < 5) {
+          log(`⚠️ Buy amount too small: ${buyAmount.toFixed(2)} (minimum $5)`);
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          continue;
+        }
+
+        const order = await placeOrder("BUY", quantity, currentPrice);
+        if (order && order.status === "FILLED") {
+          position = "LONG";
+          buyPrice = currentPrice;
+          targetPrice = currentPrice * (1 + PROFIT_PERCENTAGE / 100);
+
+          log(
+            `✅ BOUGHT ${quantity} ${SYMBOL} @ ${currentPrice} | Target: ${targetPrice.toFixed(
+              6
+            )}`
+          );
+        } else if (order === null) {
+          log(`❌ Buy order failed`);
+        }
+      } else if (position === "LONG" && currentPrice >= targetPrice) {
+        const order = await placeOrder("SELL", quantity, currentPrice);
+
+        if (order && order.status === "FILLED") {
+          const profit = (currentPrice - buyPrice) * quantity;
+
+          log(
+            `🎯 SOLD ${quantity} ${SYMBOL} @ ${currentPrice} | Profit: ${profit.toFixed(
+              4
+            )}`
+          );
+
+          position = null;
+          buyPrice = 0;
+          quantity = 0;
+          targetPrice = 0;
+        } else if (order === null) {
+          log(`❌ Sell order failed`);
+        }
+      } else if (position === "LONG") {
+        const currentProfit = (currentPrice - buyPrice) * quantity;
+        log(
+          `📊 Holding ${quantity} ${SYMBOL} | Current: $${currentPrice} | Target: $${targetPrice.toFixed(
+            6
+          )} | Profit: $${currentProfit.toFixed(4)}`
+        );
+      }
+    } catch (e) {
+      log(`❌ Error: ${e.message}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+};
+
+startBot();
