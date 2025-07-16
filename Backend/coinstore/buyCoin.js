@@ -64,10 +64,21 @@ const getBalance = async () => {
 
 const getPrice = async () => {
   try {
-    const res = await axios.get(`${FUTURES_API_BASE}/market/ticker`, {
-      params: { symbol: SYMBOL },
+    const endpoint = "/market/ticker";
+    const params = { symbol: SYMBOL };
+    const { timestamp, signature } = sign("GET", endpoint, params);
+
+    const res = await axios.get(`${FUTURES_API_BASE}${endpoint}`, {
+      params,
+      headers: {
+        "X-CS-APIKEY": apiKey,
+        "X-CS-SIGN": signature,
+        "X-CS-EXPIRES": timestamp,
+        "Content-Type": "application/json",
+      },
     });
-    return parseFloat(res.data.data.c); // 'c' is the current price in Coinstore
+
+    return parseFloat(res.data.data.c);
   } catch (e) {
     log(`❌ Price Error: ${e.response?.data?.msg || e.message}`);
     return 0;
@@ -76,15 +87,24 @@ const getPrice = async () => {
 
 const getSymbolInfo = async () => {
   try {
-    const res = await axios.get(`${FUTURES_API_BASE}/market/symbols`);
-    const symbolInfo = res.data.data.find((s) => s.symbol === SYMBOL);
-    return symbolInfo;
+    const endpoint = "/market/symbols";
+    const { timestamp, signature } = sign("GET", endpoint);
+
+    const res = await axios.get(`${FUTURES_API_BASE}${endpoint}`, {
+      headers: {
+        "X-CS-APIKEY": apiKey,
+        "X-CS-SIGN": signature,
+        "X-CS-EXPIRES": timestamp,
+        "Content-Type": "application/json",
+      },
+    });
+
+    return res.data.data.find((s) => s.symbol === SYMBOL);
   } catch (e) {
     log(`❌ Symbol Info Error: ${e.response?.data?.msg || e.message}`);
     return null;
   }
 };
-
 const getPrecision = async () => {
   const symbolInfo = await getSymbolInfo();
   if (symbolInfo) {
@@ -268,4 +288,6 @@ const startBot = async () => {
   }
 };
 
-startBot();
+// startBot();
+
+getSymbolInfo();
