@@ -6,12 +6,18 @@ const apiKey =
   "6bd1UA2kXR2lgLPv1pt9bNEOJE70h1MbXMvmoH1SceWUNw0kvXAQEdigQUgfNprI";
 const apiSecret =
   "4zHQjwWb8AopnJx0yPjTKBNpW3ntoLaNK7PnbJjxwoB8ZSeaAaGTRLdIKLsixmPR";
+
 const SYMBOL = "DOGEUSDT";
+// const SYMBOL = "1000PEPEUSDT";
+// const SYMBOL = "1000SHIBUSDT";
+// const SYMBOL = "1000BONKUSDT";
+// const SYMBOL = "1000FLOKIUSDT";
 const PROFIT_PERCENTAGE = 0.01; // 0.01%
 
 let position = null;
 let buyPrice = 0;
 let quantity = 0;
+let targetPrice = 0;
 
 const log = (msg) => {
   console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -50,8 +56,39 @@ const getPrecision = async () => {
   return Math.max(0, stepSize.indexOf("1") - 1);
 };
 
+const setLeverage = async () => {
+  const params = {
+    symbol: SYMBOL,
+    leverage: 1,
+    timestamp: Date.now(),
+  };
+  const sig = sign(params);
+  await axios.post(`${FUTURES_API_BASE}/fapi/v1/leverage`, null, {
+    params: { ...params, signature: sig },
+    headers: { "X-MBX-APIKEY": apiKey },
+  });
+};
+
+const setMarginType = async () => {
+  const params = {
+    symbol: SYMBOL,
+    marginType: "ISOLATED",
+    timestamp: Date.now(),
+  };
+  const sig = sign(params);
+  try {
+    await axios.post(`${FUTURES_API_BASE}/fapi/v1/marginType`, null, {
+      params: { ...params, signature: sig },
+      headers: { "X-MBX-APIKEY": apiKey },
+    });
+  } catch (_) {}
+};
+
 const placeOrder = async (side, qty) => {
   try {
+    // await setMarginType();
+    // await setLeverage();
+
     const params = {
       symbol: SYMBOL,
       side,
@@ -59,11 +96,15 @@ const placeOrder = async (side, qty) => {
       quantity: qty,
       timestamp: Date.now(),
     };
+    console.log(`params---->>>>>>>>>>>> place order   `, params);
+
     const sig = sign(params);
     const res = await axios.post(`${FUTURES_API_BASE}/fapi/v1/order`, null, {
       params: { ...params, signature: sig },
       headers: { "X-MBX-APIKEY": apiKey },
     });
+    console.log(`place order response  ----`, res.data);
+
     return res.data;
   } catch (e) {
     log(`❌ Order Error: ${e.response?.data?.msg || e.message}`);
@@ -78,16 +119,30 @@ const startBot = async () => {
   while (true) {
     try {
       const currentPrice = await getPrice();
+      //   position = "LONG";
+      //   quantity = 100
+      // BUY - if no position
 
-      // Buy if no position
+      console.log(`currentPrice >=`, currentPrice);
+      console.log(`targetPrice`, targetPrice);
+      console.log(`position  -- `, position);
       if (!position) {
         const balance = await getBalance();
         const buyAmount = balance;
         quantity = parseFloat((buyAmount / currentPrice).toFixed(precision));
 
+        log(
+          `💰 Balance: ${balance.toFixed(2)} | Buying with ${buyAmount.toFixed(
+            2
+          )}`
+        );
+
+        // Check minimum order value (usually $5-10)
         if (buyAmount < 5) {
           log(`⚠️ Buy amount too small: ${buyAmount.toFixed(2)} (minimum $5)`);
-          await new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
+          await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+          // send telly message
+          position = "LONG";
           continue;
         }
 
@@ -95,47 +150,61 @@ const startBot = async () => {
         if (order && order.status === "FILLED") {
           position = "LONG";
           buyPrice = currentPrice;
-          log(`✅ BOUGHT ${quantity} ${SYMBOL} @ ${currentPrice}`);
-        } else {
+          targetPrice = currentPrice * (1 + PROFIT_PERCENTAGE / 100);
+
+          log(
+            `✅ BOUGHT ${quantity} ${SYMBOL} @ ${currentPrice} | Target: ${targetPrice.toFixed(
+              6
+            )}`
+          );
+        } else if (order === null) {
           log(`❌ Buy order failed`);
-          await new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
-          continue;
         }
       }
 
-      // Check if current price is higher than buy price and sell
-      else if (position === "LONG" && currentPrice > buyPrice) {
-        const order = await placeOrder("SELL", quantity);
+      // SELL - if have position and target reached
+      else if (position === "LONG" && currentPrice >= targetPrice) {
+        console.log("enter into sell");
+
+        // else if (position === "LONG") {
+        //const order = await placeOrder("SELL", quantity);
+        const order = await placeOrder("SELL", 100);
+
+        console.log("sell order placed", order);
+
         if (order && order.status === "FILLED") {
           const profit = (currentPrice - buyPrice) * quantity;
+
           log(
             `🎯 SOLD ${quantity} ${SYMBOL} @ ${currentPrice} | Profit: ${profit.toFixed(
               4
             )}`
           );
+
+          // Reset for next cycle
           position = null;
           buyPrice = 0;
           quantity = 0;
-          await new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
-        } else {
+          targetPrice = 0;
+        } else if (order === null) {
           log(`❌ Sell order failed`);
         }
       }
 
-      // Status update if holding
+      // Status update
       else if (position === "LONG") {
         const currentProfit = (currentPrice - buyPrice) * quantity;
         log(
-          `📊 Holding ${quantity} ${SYMBOL} | Current: $${currentPrice} | Buy Price: $${buyPrice} | Profit: $${currentProfit.toFixed(
-            4
-          )}`
+          `📊 Holding ${quantity} ${SYMBOL} | Current: $${currentPrice} | Target: $${targetPrice.toFixed(
+            6
+          )} | Profit: $${currentProfit.toFixed(4)}`
         );
       }
     } catch (e) {
       log(`❌ Error: ${e.message}`);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Check every 1 second
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 second delay
   }
 };
 
