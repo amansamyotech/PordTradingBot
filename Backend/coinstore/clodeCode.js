@@ -17,6 +17,20 @@ const log = (msg) => {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 };
 
+// Retry logic with exponential backoff
+const retry = async (fn, maxRetries = 3, baseDelay = 2000) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i === maxRetries - 1) throw e;
+      const delay = baseDelay * Math.pow(2, i); // Exponential backoff
+      log(`Retrying after ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
 const sign = (payload, expires) => {
   const expiresKey = Math.floor(expires / 30000).toString();
   const key = crypto
@@ -41,6 +55,8 @@ const getBalance = async () => {
     "Content-Type": "application/json",
     Accept: "*/*",
     Connection: "keep-alive",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
   };
 
   try {
@@ -61,8 +77,15 @@ const getBalance = async () => {
 
 const getPrice = async () => {
   const url = `${SPOT_API_BASE}/api/v2/public/ticker?symbolCode=${SYMBOL}`;
+  const headers = {
+    Accept: "*/*",
+    Connection: "keep-alive",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+  };
+
   try {
-    const res = await axios.get(url);
+    const res = await axios.get(url, { headers });
     if (res.data.code !== 0) {
       log(`❌ Price Error: ${res.data.message || "Unknown error"}`);
       return 0;
@@ -77,11 +100,21 @@ const getPrice = async () => {
 
 const getPrecision = async () => {
   const url = `${SPOT_API_BASE}/v2/public/config/spot/symbols`;
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "*/*",
+    Connection: "keep-alive",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+  };
   try {
-    const res = await axios.post(url, { symbolCodes: [SYMBOL] });
+    const res = await axios.post(url, { symbolCodes: [SYMBOL] }, { headers });
+    if (res.data.code !== 0) {
+      log(`❌ Precision Error: ${res.data.message || "Unknown error"}`);
+      return 0;
+    }
     const symbolInfo = res.data.data.find((s) => s.symbolCode === SYMBOL);
-    const stepSize = symbolInfo.quantityPrecision;
-    return parseInt(stepSize);
+    return parseInt(symbolInfo?.quantityPrecision || 0);
   } catch (e) {
     log(`❌ Precision Error: ${JSON.stringify(e.response?.data || e.message)}`);
     return 0;
@@ -91,7 +124,6 @@ const getPrecision = async () => {
 const placeOrder = async (side, qty, price) => {
   const url = `${SPOT_API_BASE}/api/trade/order/place`;
   const expires = Date.now();
-
   const payload = JSON.stringify({
     symbol: SYMBOL,
     side,
@@ -99,7 +131,6 @@ const placeOrder = async (side, qty, price) => {
     ordQty: qty.toString(),
     timestamp: expires,
   });
-
   const headers = {
     "X-CS-APIKEY": apiKey,
     "X-CS-SIGN": sign(payload, expires),
@@ -108,6 +139,8 @@ const placeOrder = async (side, qty, price) => {
     "Content-Type": "application/json",
     Accept: "*/*",
     Connection: "keep-alive",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
   };
 
   try {
@@ -128,17 +161,17 @@ const placeOrder = async (side, qty, price) => {
 
 const startBot = async () => {
   log("🚀 Starting Bot...");
-  const precision = await getPrecision();
+  const precision = await retry(getPrecision);
 
   while (true) {
     try {
-      const currentPrice = await getPrice();
+      const currentPrice = await retry(getPrice);
       console.log(`currentPrice >=`, currentPrice);
       console.log(`targetPrice`, targetPrice);
       console.log(`position  -- `, position);
 
       if (!position) {
-        const balance = await getBalance();
+        const balance = await retry(getBalance);
         const buyAmount = balance;
         quantity = parseFloat((buyAmount / currentPrice).toFixed(precision));
 
@@ -154,7 +187,7 @@ const startBot = async () => {
           continue;
         }
 
-        const order = await placeOrder("BUY", quantity, currentPrice);
+        const order = await retry(() => placeOrder("BUY", quantity, currentPrice));
         if (order && order.status === "FILLED") {
           position = "LONG";
           buyPrice = currentPrice;
@@ -169,7 +202,7 @@ const startBot = async () => {
           log(`❌ Buy order failed`);
         }
       } else if (position === "LONG" && currentPrice >= targetPrice) {
-        const order = await placeOrder("SELL", quantity, currentPrice);
+        const order = await retry(() => placeOrder("SELL", quantity, currentPrice));
 
         if (order && order.status === "FILLED") {
           const profit = (currentPrice - buyPrice) * quantity;
@@ -199,7 +232,7 @@ const startBot = async () => {
       log(`❌ Error: ${JSON.stringify(e.response?.data || e.message)}`);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 5000)); // Increased delay
   }
 };
 
